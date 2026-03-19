@@ -6,14 +6,14 @@ import { RealtimeService } from "./services/realtime";
 const realtimeService = new RealtimeService();
 
 const server = Bun.serve({
-  port: 3000,
+  port: 3010,
   async fetch(req) {
     const url = new URL(req.url);
 
     // Create a device
     if (url.pathname === "/devices" && req.method === "POST") {
       try {
-        const body = await req.json() as { name: string };
+        const body = (await req.json()) as { name: string };
         const device = DeviceModel.create(body.name);
         return new Response(JSON.stringify({ deviceId: device.id }), {
           status: 201,
@@ -28,7 +28,9 @@ const server = Bun.serve({
     }
 
     // Subscribe a device to a stop
-    const subscribeMatch = url.pathname.match(/^\/devices\/([^\/]+)\/subscribe$/);
+    const subscribeMatch = url.pathname.match(
+      /^\/devices\/([^\/]+)\/subscribe$/,
+    );
     if (subscribeMatch && req.method === "POST") {
       const deviceId = subscribeMatch[1];
 
@@ -41,26 +43,29 @@ const server = Bun.serve({
       }
 
       try {
-        const body = await req.json() as {
+        const body = (await req.json()) as {
           provider: string;
           line: string;
           direction: string;
-          stopId: string
+          stopId: string;
         };
         const subscription = SubscriptionModel.create(
           deviceId,
           body.provider,
           body.line,
           body.direction,
-          body.stopId
+          body.stopId,
         );
-        return new Response(JSON.stringify({
-          success: true,
-          subscriptionId: subscription.id
-        }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            subscriptionId: subscription.id,
+          }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       } catch (error) {
         return new Response(JSON.stringify({ error: "Invalid request" }), {
           status: 400,
@@ -86,11 +91,11 @@ const server = Bun.serve({
       const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
       const data = await realtimeService.getArrivalsForMultipleStops(
-        subscriptions.map(sub => ({
+        subscriptions.map((sub) => ({
           stopId: sub.stopId,
           line: sub.line,
-          direction: sub.direction
-        }))
+          direction: sub.direction,
+        })),
       );
 
       return new Response(JSON.stringify({ data }), {
@@ -102,4 +107,6 @@ const server = Bun.serve({
   },
 });
 
-console.log(`🚇 Transit board backend running at http://localhost:${server.port}`);
+console.log(
+  `🚇 Transit board backend running at http://localhost:${server.port}`,
+);

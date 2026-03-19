@@ -58,6 +58,18 @@ export class GTFSStopModel {
     return stmt.get(stopId) as GTFSStop | undefined;
   }
 
+  static getByIdWithFallback(stopId: string): GTFSStop | undefined {
+    let stop = this.getById(stopId);
+    if (stop) return stop;
+    
+    if (stopId.endsWith('N') || stopId.endsWith('S')) {
+      const baseStopId = stopId.slice(0, -1);
+      stop = this.getById(baseStopId);
+    }
+    
+    return stop;
+  }
+
   static getAll(): GTFSStop[] {
     const stmt = db.prepare("SELECT * FROM gtfs_stops");
     return stmt.all() as GTFSStop[];
