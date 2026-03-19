@@ -1,0 +1,13 @@
+{
+  "name": "transit-board",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev:backend": "cd apps/backend && ~/.bun/bin/bun --watch src/index.ts",
+    "start:backend": "cd apps/backend && ~/.bun/bin/bun src/index.ts"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

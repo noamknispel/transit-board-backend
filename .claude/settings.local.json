@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install:*)",
+      "Bash(curl -fsSL https://bun.sh/install | bash)",
+      "Bash(~/.bun/bin/bun install:*)",
+      "Bash(~/.bun/bin/bun run:*)",
+      "Bash(sleep 2 && curl http://localhost:3000)",
+      "Bash(~/.bun/bin/bun src/index.ts)",
+      "Bash(sleep 1 && curl http://localhost:3000)",
+      "Bash(curl http://localhost:3000/stations)",
+      "Bash(curl -X POST http://localhost:3000/stations -H \"Content-Type: application/json\" -d '{\"name\":\"Grand Central\",\"line\":\"4/5/6\",\"stop_id\":\"GC-123\"}')",
+      "Bash(~/.bun/bin/bun --cwd apps/backend dev)",
+      "Bash(~/.bun/bin/bun /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/src/index.ts)",
+      "Bash(sleep 2 && curl http://localhost:3000 && echo \"\" && curl http://localhost:3000/stations)",
+      "Bash(~/.bun/bin/bun --watch src/index.ts)",
+      "Bash(curl -X POST http://localhost:3000/devices/dbe5fe14-d4f2-4165-87e1-842127adb670/subscribe -H \"Content-Type: application/json\" -d '{\"provider\": \"MTA\", \"line\": \"A\", \"direction\": \"uptown\", \"stopId\": \"123\"}')",
+      "Bash(curl http://localhost:3000/devices/dbe5fe14-d4f2-4165-87e1-842127adb670/data)",
+      "Bash(curl -X POST http://localhost:3000/devices/dbe5fe14-d4f2-4165-87e1-842127adb670/subscribe -H \"Content-Type: application/json\" -d '{\"provider\": \"MTA\", \"line\": \"1\", \"direction\": \"downtown\", \"stopId\": \"456\"}')",
+      "Bash(curl http://localhost:3000/devices/invalid-uuid/data)",
+      "Bash(cd apps/backend && sqlite3 transit.db \"SELECT * FROM devices;\")",
+      "Bash(cd apps/backend && sqlite3 transit.db \"SELECT * FROM subscriptions;\")",
+      "Bash(cd apps/backend && sqlite3 transit.db \".schema devices\")",
+      "Bash(cd apps/backend && sqlite3 transit.db \".schema subscriptions\")",
+      "Bash(sqlite3 /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/transit.db \"SELECT * FROM subscriptions;\")",
+      "Bash(sqlite3 /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/transit.db \".schema devices\")",
+      "Bash(sqlite3 /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/transit.db \".schema subscriptions\")",
+      "Bash(sqlite3 /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/transit.db \".tables\")",
+      "Bash(sqlite3 /Users/noamknispel/projects/personal/transit-board-backend/apps/backend/transit.db \"SELECT * FROM migrations;\")"
+    ]
+  }
+}
