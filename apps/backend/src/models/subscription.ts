@@ -15,8 +15,9 @@ export interface TransitData {
   line: string;
   direction: string;
   finalStopName: string;
-  ETA: string;
+  etas: number[];
   stopId: string;
+  routeId?: string;
 }
 
 export class SubscriptionModel {
