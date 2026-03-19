@@ -1,6 +1,9 @@
 import { StationModel } from "./models/station";
 import { DeviceModel } from "./models/device";
 import { SubscriptionModel, type TransitData } from "./models/subscription";
+import { RealtimeService } from "./services/realtime";
+
+const realtimeService = new RealtimeService();
 
 const server = Bun.serve({
   port: 3000,
@@ -79,26 +82,16 @@ const server = Bun.serve({
         });
       }
 
-      // Get subscriptions and format as transit data
+      // Get subscriptions and fetch real-time arrivals
       const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
-      // Mock data: simulate 2 arrivals per subscription
-      const data: TransitData[] = subscriptions.flatMap(sub => [
-        {
-          line: sub.line,
-          direction: sub.direction,
-          finalStopName: "Grand Central",
-          ETA: "2min",
+      const data = await realtimeService.getArrivalsForMultipleStops(
+        subscriptions.map(sub => ({
           stopId: sub.stopId,
-        },
-        {
           line: sub.line,
-          direction: sub.direction,
-          finalStopName: "Grand Central",
-          ETA: "7min",
-          stopId: sub.stopId,
-        }
-      ]);
+          direction: sub.direction
+        }))
+      );
 
       return new Response(JSON.stringify({ data }), {
         headers: { "Content-Type": "application/json" },

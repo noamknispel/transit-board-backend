@@ -17,6 +17,9 @@ export interface TransitData {
   finalStopName: string;
   ETA: string;
   stopId: string;
+  routeId?: string;
+  arrivalTime?: string;
+  delay?: number;
 }
 
 export class SubscriptionModel {

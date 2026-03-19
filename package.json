@@ -5,7 +5,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev:backend": "cd apps/backend && ~/.bun/bin/bun --watch src/index.ts",
-    "start:backend": "cd apps/backend && ~/.bun/bin/bun src/index.ts"
+    "start:backend": "cd apps/backend && ~/.bun/bin/bun src/index.ts",
+    "import:gtfs": "cd apps/backend && ~/.bun/bin/bun src/cli/import-gtfs.ts"
   },
   "devDependencies": {
     "bun-types": "latest"

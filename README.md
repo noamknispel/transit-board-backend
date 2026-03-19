@@ -28,18 +28,32 @@ bun run start:backend
 
 The backend server will start at `http://localhost:3000`
 
+### Setup
+
+1. Import GTFS static data:
+   ```bash
+   bun run import:gtfs
+   ```
+   This downloads and parses subway schedule data from the MTA feed.
+
 ### Endpoints
 
-- `GET /` - Returns "hello world"
-- `GET /stations` - List all subway stations
-- `POST /stations` - Create a new station
+- `POST /devices` - Create a new device
+  ```json
+  { "name": "Living Room Display" }
+  ```
+
+- `POST /devices/:deviceId/subscribe` - Subscribe a device to a subway stop
   ```json
   {
-    "name": "Grand Central",
-    "line": "4/5/6",
-    "stop_id": "GC-123"
+    "provider": "mta",
+    "line": "4",
+    "direction": "uptown",
+    "stopId": "127N"
   }
   ```
+
+- `GET /devices/:deviceId/data` - Get real-time arrival data for a device's subscriptions
 
 ## Tech Stack
 

@@ -4,9 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "import:gtfs": "bun src/cli/import-gtfs.ts"
   },
   "devDependencies": {
     "bun-types": "latest"
+  },
+  "dependencies": {
+    "gtfs-rt-bindings": "^4.9.0",
+    "gtfs-stream": "^3.0.0"
   }
 }
