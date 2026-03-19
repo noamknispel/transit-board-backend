@@ -1,5 +1,5 @@
-import * as GtfsRealtimeBindings from "gtfs-rt-bindings";
-import { GTFSTripModel, GTFSRouteModel, GTFSStopModel } from "../models/gtfs";
+import GtfsRealtimeBindings from "gtfs-rt-bindings";
+import { GTFSTripModel, GTFSRouteModel, GTFSStopModel, GTFSStopTimeModel } from "../models/gtfs";
 import type { TransitData } from "../models/subscription";
 
 const FEED_URLS: Record<string, string> = {
@@ -59,9 +59,7 @@ export class RealtimeService {
       }
 
       const buffer = await response.arrayBuffer();
-      const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
-        new Uint8Array(buffer)
-      );
+      const feed = GtfsRealtimeBindings.FeedMessage.decode(new Uint8Array(buffer));
 
       this.cache.set(feedKey, { data: feed, timestamp: now });
       return feed;
@@ -84,6 +82,65 @@ export class RealtimeService {
     }
   }
 
+  private parseTime(timestamp: any): number {
+    if (typeof timestamp === "number") {
+      return timestamp;
+    }
+    if (typeof timestamp === "string") {
+      return parseInt(timestamp);
+    }
+    if (timestamp && typeof timestamp === "object" && "low" in timestamp) {
+      return timestamp.low;
+    }
+    return 0;
+  }
+
+  private estimateArrival(
+    currentStopSequence: number,
+    targetStopSequence: number,
+    currentTime: number
+  ): number {
+    const stopsAway = targetStopSequence - currentStopSequence;
+    if (stopsAway <= 0) return currentTime;
+    
+    const avgTimePerStop = 120;
+    return currentTime + (stopsAway * avgTimePerStop);
+  }
+
+  private matchesDirection(tripId: string, requestedDirection: string): boolean {
+    const tripIdUpper = tripId.toUpperCase();
+    const directionUpper = requestedDirection.toUpperCase();
+    
+    if (directionUpper.includes("NORTH") || directionUpper.includes("UPTOWN")) {
+      return tripIdUpper.includes("..N");
+    } else if (directionUpper.includes("SOUTH") || directionUpper.includes("DOWNTOWN")) {
+      return tripIdUpper.includes("..S");
+    }
+    
+    return true;
+  }
+
+  private findMatchingStaticTrips(
+    routeId: string,
+    realtimeTripId: string,
+    startTime?: string
+  ): string[] {
+    const allTrips = GTFSTripModel.getByRouteId(routeId);
+    const matches: string[] = [];
+
+    const tripSuffix = realtimeTripId.match(/(_[0-9A-Z.]+)$/)?.[0];
+    
+    for (const trip of allTrips) {
+      if (tripSuffix && trip.trip_id.includes(tripSuffix)) {
+        matches.push(trip.trip_id);
+      } else if (startTime && trip.trip_id.includes(startTime.replace(/:/g, ""))) {
+        matches.push(trip.trip_id);
+      }
+    }
+
+    return matches;
+  }
+
   async getArrivalsForStop(stopId: string, line: string, direction: string): Promise<TransitData[]> {
     const feedKey = this.getFeedKeyForLine(line);
     if (!feedKey) {
@@ -94,45 +151,59 @@ export class RealtimeService {
     try {
       const feed = await this.fetchFeed(feedKey);
       const arrivals: TransitData[] = [];
+      const now = Math.floor(Date.now() / 1000);
 
       for (const entity of feed.entity) {
-        if (!entity.tripUpdate) continue;
+        if (!entity.vehicle) continue;
 
-        const tripUpdate = entity.tripUpdate;
-        const tripId = tripUpdate.trip?.tripId;
+        const vehicle = entity.vehicle;
+        const realtimeTripId = vehicle.trip?.trip_id;
+        const routeId = vehicle.trip?.route_id;
+        const startTime = vehicle.trip?.start_time;
         
-        if (!tripId) continue;
+        if (!realtimeTripId || !routeId) continue;
 
-        const trip = GTFSTripModel.getById(tripId);
-        if (!trip) continue;
-
-        const route = GTFSRouteModel.getById(trip.route_id);
+        const route = GTFSRouteModel.getById(routeId);
         if (!route || route.route_short_name !== line) continue;
 
-        const directionMatch = direction.toLowerCase();
-        const tripDirection = trip.direction_id?.toString() || "";
-        
-        for (const stopTimeUpdate of tripUpdate.stopTimeUpdate || []) {
-          if (stopTimeUpdate.stopId === stopId) {
-            const arrivalTime = stopTimeUpdate.arrival?.time || stopTimeUpdate.departure?.time;
-            
-            if (arrivalTime) {
-              const timestamp = typeof arrivalTime === "number" 
-                ? arrivalTime 
-                : parseInt(arrivalTime.toString());
+        if (!this.matchesDirection(realtimeTripId, direction)) continue;
 
-              arrivals.push({
-                line: route.route_short_name || line,
-                direction: directionMatch,
-                finalStopName: trip.trip_headsign || "Unknown",
-                ETA: this.formatETA(timestamp),
-                stopId: stopId,
-                routeId: route.route_id,
-                arrivalTime: new Date(timestamp * 1000).toISOString(),
-                delay: stopTimeUpdate.arrival?.delay || 0
-              });
-            }
-          }
+        const matchingTripIds = this.findMatchingStaticTrips(routeId, realtimeTripId, startTime);
+        
+        for (const staticTripId of matchingTripIds) {
+          const trip = GTFSTripModel.getById(staticTripId);
+          if (!trip) continue;
+
+          const stopTimes = GTFSStopTimeModel.getByTripId(staticTripId);
+          if (stopTimes.length === 0) continue;
+
+          const targetStopTime = stopTimes.find(st => st.stop_id === stopId);
+          if (!targetStopTime) continue;
+
+          const currentStopSeq = vehicle.current_stop_sequence || 0;
+          const targetStopSeq = targetStopTime.stop_sequence;
+
+          if (targetStopSeq <= currentStopSeq) continue;
+
+          const vehicleTimestamp = this.parseTime(vehicle.timestamp);
+          const estimatedArrival = this.estimateArrival(
+            currentStopSeq,
+            targetStopSeq,
+            vehicleTimestamp || now
+          );
+
+          arrivals.push({
+            line: route.route_short_name || line,
+            direction: direction.toLowerCase(),
+            finalStopName: trip.trip_headsign || "Unknown",
+            ETA: this.formatETA(estimatedArrival),
+            stopId: stopId,
+            routeId: route.route_id,
+            arrivalTime: new Date(estimatedArrival * 1000).toISOString(),
+            delay: 0
+          });
+
+          break;
         }
       }
 

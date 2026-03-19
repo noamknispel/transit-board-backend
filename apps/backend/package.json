@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "import:gtfs": "bun src/cli/import-gtfs.ts"
+    "import:gtfs": "~/.bun/bin/bun src/cli/import-gtfs.ts"
   },
   "devDependencies": {
     "bun-types": "latest"
