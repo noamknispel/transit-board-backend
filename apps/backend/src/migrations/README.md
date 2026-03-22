@@ -29,7 +29,9 @@ This directory contains SQL migration files that define the database schema.
 
 ## Existing Migrations
 
-- `001_initial_schema.sql` - Creates stations, devices, and subscriptions tables
+- `001_initial_schema.sql` - Creates devices and subscriptions tables
+- `002_gtfs_schema.sql` - Creates GTFS tables (routes, stops, trips, stop_times)
+- `003_drop_stations_table.sql` - Drops unused stations table
 
 ## Notes
 

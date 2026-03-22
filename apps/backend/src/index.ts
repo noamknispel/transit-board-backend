@@ -1,6 +1,5 @@
-import { StationModel } from "./models/station";
 import { DeviceModel } from "./models/device";
-import { SubscriptionModel, type TransitData } from "./models/subscription";
+import { SubscriptionModel } from "./models/subscription";
 import { RealtimeService } from "./services/realtime";
 
 const realtimeService = new RealtimeService();

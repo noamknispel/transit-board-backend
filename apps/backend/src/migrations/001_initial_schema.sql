@@ -1,15 +1,4 @@
--- Initial schema: stations, devices, and subscriptions tables
-
-CREATE TABLE IF NOT EXISTS stations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  line TEXT NOT NULL,
-  stop_id TEXT UNIQUE NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_stations_stop_id ON stations(stop_id);
+-- Initial schema: devices and subscriptions tables
 
 CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
