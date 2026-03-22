@@ -1,0 +1,6 @@
+CIRCUITPY_WIFI_SSID = "YourNetworkName"
+CIRCUITPY_WIFI_PASSWORD = "YourNetworkPassword"
+BACKEND_URL = "http://192.168.x.x:3010"
+DEVICE_ID = "your-device-uuid-here"
+POLL_INTERVAL = "30"
+PAGE_DURATION = "5"

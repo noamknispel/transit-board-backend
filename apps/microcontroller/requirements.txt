@@ -1,0 +1,4 @@
+adafruit-circuitpython-matrixportal
+adafruit-circuitpython-display-text
+adafruit-circuitpython-display-shapes
+adafruit-circuitpython-requests
