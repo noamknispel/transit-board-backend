@@ -6,6 +6,7 @@ import { RealtimeService } from "./services/realtime";
 const realtimeService = new RealtimeService();
 
 const server = Bun.serve({
+  hostname: "0.0.0.0",
   port: 3010,
   async fetch(req) {
     const url = new URL(req.url);
@@ -71,6 +72,61 @@ const server = Bun.serve({
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
+      }
+    }
+
+    // Delete a subscription
+    const deleteMatch = url.pathname.match(
+      /^\/devices\/([^\/]+)\/subscriptions\/([^\/]+)$/,
+    );
+    if (deleteMatch && req.method === "DELETE") {
+      const deviceId = deleteMatch[1];
+      const subscriptionId = parseInt(deleteMatch[2]);
+
+      const device = DeviceModel.getById(deviceId);
+      if (!device) {
+        return new Response(JSON.stringify({ error: "Device not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const subscription = SubscriptionModel.getById(subscriptionId);
+      if (!subscription) {
+        return new Response(
+          JSON.stringify({ error: "Subscription not found" }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // Verify the subscription belongs to this device
+      if (subscription.deviceId !== deviceId) {
+        return new Response(
+          JSON.stringify({ error: "Subscription does not belong to this device" }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const deleted = SubscriptionModel.delete(subscriptionId);
+      if (deleted) {
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Failed to delete subscription" }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
     }
 
