@@ -130,6 +130,26 @@ const server = Bun.serve({
       }
     }
 
+    // List subscriptions for a device
+    const listMatch = url.pathname.match(/^\/devices\/([^\/]+)\/subscriptions$/);
+    if (listMatch && req.method === "GET") {
+      const deviceId = listMatch[1];
+
+      const device = DeviceModel.getById(deviceId);
+      if (!device) {
+        return new Response(JSON.stringify({ error: "Device not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
+      return new Response(JSON.stringify({ subscriptions }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // Get device data
     const dataMatch = url.pathname.match(/^\/devices\/([^\/]+)\/data$/);
     if (dataMatch && req.method === "GET") {

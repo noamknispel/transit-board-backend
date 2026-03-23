@@ -234,6 +234,12 @@ export class RealtimeService {
             const finalStop = GTFSStopModel.getByIdWithFallback(lastStopId);
             dbLookupTime += Date.now() - lookupStart;
             finalStopName = finalStop?.stop_name || "Unknown";
+
+            // Add "st" suffix if stop name is only numbers
+            if (/^\d+$/.test(finalStopName)) {
+              finalStopName = `${finalStopName} St`;
+            }
+
             console.log(`Final stop lookup: ${lastStopId} -> ${finalStopName}`);
           }
 
