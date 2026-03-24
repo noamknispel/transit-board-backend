@@ -138,49 +138,7 @@ export class RealtimeService {
     }
 
     try {
-      const feedFetchStart = Date.now();
       const feed = await this.fetchFeed(feedKey);
-      console.log(`Feed fetch took ${Date.now() - feedFetchStart}ms`);
-
-      console.log("\n=== FEED VEHICLE DATA ===");
-      for (const entity of feed.entity.slice(0, 5)) {
-        if (entity.vehicle) {
-          const v = entity.vehicle;
-          console.log({
-            tripId: v.trip?.trip_id,
-            routeId: v.trip?.route_id,
-            stopId: v.stop_id,
-            currentStatus: v.current_status,
-            timestamp: v.timestamp
-              ? new Date(this.parseTime(v.timestamp) * 1000).toISOString()
-              : "N/A",
-            currentStopSequence: v.current_stop_sequence,
-          });
-        }
-        if (entity.trip_update) {
-          const tu = entity.trip_update;
-          console.log({
-            tripId: tu.trip?.trip_id,
-            routeId: tu.trip?.route_id,
-            stopTimeUpdates: tu.stop_time_update
-              ?.slice(0, 3)
-              .map((stu: any) => ({
-                stopId: stu.stop_id,
-                arrival: stu.arrival
-                  ? new Date(
-                      this.parseTime(stu.arrival.time) * 1000,
-                    ).toISOString()
-                  : "N/A",
-                departure: stu.departure
-                  ? new Date(
-                      this.parseTime(stu.departure.time) * 1000,
-                    ).toISOString()
-                  : "N/A",
-              })),
-          });
-        }
-      }
-      console.log("=== END FEED SAMPLE ===\n");
 
       const processingStart = Date.now();
       const arrivals: TempArrival[] = [];
@@ -225,16 +183,16 @@ export class RealtimeService {
               ?.stop_id;
           let finalStopName = "Unknown";
 
-          console.log(
-            `Trip ${tripId}: lastStopId = ${lastStopId}, total stops = ${tripUpdate.stop_time_update.length}`,
-          );
-
           if (lastStopId) {
             const lookupStart = Date.now();
             const finalStop = GTFSStopModel.getByIdWithFallback(lastStopId);
             dbLookupTime += Date.now() - lookupStart;
             finalStopName = finalStop?.stop_name || "Unknown";
-            console.log(`Final stop lookup: ${lastStopId} -> ${finalStopName}`);
+
+            // Add "st" suffix if stop name is only numbers
+            if (/^\d+$/.test(finalStopName)) {
+              finalStopName = `${finalStopName} St`;
+            }
           }
 
           arrivals.push({
@@ -281,9 +239,6 @@ export class RealtimeService {
     const allArrivals: TempArrival[] = [];
 
     for (const sub of subscriptions) {
-      console.log(
-        `\nFetching arrivals for stop ${sub.stopId}, line ${sub.line}, direction ${sub.direction}`,
-      );
       const arrivals = await this.getArrivalsForStop(
         sub.stopId,
         sub.line,

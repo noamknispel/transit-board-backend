@@ -6,7 +6,13 @@
   "scripts": {
     "dev:backend": "cd apps/backend && ~/.bun/bin/bun --watch src/index.ts",
     "start:backend": "cd apps/backend && ~/.bun/bin/bun src/index.ts",
-    "import:gtfs": "cd apps/backend && ~/.bun/bin/bun src/cli/import-gtfs.ts"
+    "import:gtfs": "cd apps/backend && ~/.bun/bin/bun src/cli/import-gtfs.ts",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop transit-board",
+    "pm2:restart": "pm2 restart transit-board",
+    "pm2:delete": "pm2 delete transit-board",
+    "pm2:logs": "pm2 logs transit-board",
+    "pm2:status": "pm2 status"
   },
   "devDependencies": {
     "bun-types": "latest"
