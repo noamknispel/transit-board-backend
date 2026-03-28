@@ -194,6 +194,12 @@ def clear_row(row):
     eta_labels[row].text = ""
 
 
+def clear_display():
+    """Clear the entire display (blank/off state)."""
+    for row in range(ROWS):
+        clear_row(row)
+
+
 def render_page(page_entries):
     """Render up to 2 entries from the current page."""
     for row in range(ROWS):
@@ -252,7 +258,7 @@ except Exception as e:
 
 
 def fetch_data():
-    """Fetch transit data from backend. Returns list of entries or None on error."""
+    """Fetch transit data from backend. Returns dict with 'active' and 'data' keys, or None on error."""
     url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
     print("Fetching:", url)
     try:
@@ -260,9 +266,10 @@ def fetch_data():
         print("Response status:", response.status_code)
         if response.status_code == 200:
             payload = response.json()
-            print("Data entries:", len(payload.get("data", [])))
+            print("Active:", payload.get("active", True))
+            print("Data entries:", len(payload.get("data", [])) if payload.get("data") else 0)
             response.close()
-            return payload.get("data", [])
+            return payload
         else:
             print("HTTP error:", response.status_code)
             response.close()
@@ -296,17 +303,28 @@ while True:
         result = fetch_data()
 
         if result is not None:
-            entries = result
-            
-            # Check if we have any entries
-            if len(entries) == 0:
-                set_status("No trains")
+            # Check if device is active
+            is_active = result.get("active", True)  # Default to True for backward compat
+
+            if not is_active:
+                # Device is off - clear display
+                print("Device is inactive (off/outside schedule)")
+                clear_display()
+                entries = []
                 pages = []
             else:
-                # Build pages: chunks of 2 entries
-                pages = [entries[i:i + ROWS] for i in range(0, len(entries), ROWS)]
-                current_page = 0
-                render_page(pages[current_page])
+                # Device is active - process data
+                entries = result.get("data", [])
+
+                # Check if we have any entries
+                if len(entries) == 0:
+                    set_status("No trains")
+                    pages = []
+                else:
+                    # Build pages: chunks of 2 entries
+                    pages = [entries[i:i + ROWS] for i in range(0, len(entries), ROWS)]
+                    current_page = 0
+                    render_page(pages[current_page])
         else:
             set_status("No data")
             pages = []

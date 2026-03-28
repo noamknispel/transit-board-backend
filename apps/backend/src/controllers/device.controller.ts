@@ -98,6 +98,13 @@ export const getDeviceData = async (deviceId: string) => {
     return jsonResponse({ error: "Device not found" }, 404);
   }
 
+  // Check if device is active based on status and time settings
+  const active = DeviceModel.isDeviceActive(device);
+
+  if (!active) {
+    return jsonResponse({ active: false, data: null });
+  }
+
   const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
   const data = await realtimeService.getArrivalsForMultipleStops(
@@ -108,5 +115,40 @@ export const getDeviceData = async (deviceId: string) => {
     })),
   );
 
-  return jsonResponse({ data });
+  return jsonResponse({ active: true, data });
+};
+
+export const updateDevice = async (req: Request, deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) {
+    return jsonResponse({ error: "Device not found" }, 404);
+  }
+
+  try {
+    const body = (await req.json()) as {
+      name?: string;
+      status?: 'on' | 'off' | 'auto';
+      onTime?: string;
+      offTime?: string;
+    };
+
+    // Validate time format if provided
+    const timeRegex = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (body.onTime && !timeRegex.test(body.onTime)) {
+      return jsonResponse({ error: "Invalid onTime format. Use HH:MM (00:00-23:59)" }, 400);
+    }
+    if (body.offTime && !timeRegex.test(body.offTime)) {
+      return jsonResponse({ error: "Invalid offTime format. Use HH:MM (00:00-23:59)" }, 400);
+    }
+
+    // Validate status value
+    if (body.status && !['on', 'off', 'auto'].includes(body.status)) {
+      return jsonResponse({ error: "Invalid status. Must be 'on', 'off', or 'auto'" }, 400);
+    }
+
+    const updatedDevice = DeviceModel.update(deviceId, body);
+    return jsonResponse({ device: updatedDevice });
+  } catch (error) {
+    return jsonResponse({ error: "Invalid request" }, 400);
+  }
 };
