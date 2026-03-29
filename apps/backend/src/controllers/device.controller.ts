@@ -82,6 +82,26 @@ export const deleteSubscription = async (
   }
 };
 
+export const getDevice = async (deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) {
+    return jsonResponse({ error: "Device not found" }, 404);
+  }
+
+  const active = DeviceModel.isDeviceActive(device);
+
+  return jsonResponse({
+    device: {
+      id: device.id,
+      name: device.name,
+      status: device.status,
+      onTime: device.onTime,
+      offTime: device.offTime,
+      active,
+    },
+  });
+};
+
 export const listSubscriptions = async (deviceId: string) => {
   const device = DeviceModel.getById(deviceId);
   if (!device) {
