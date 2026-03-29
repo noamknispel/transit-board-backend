@@ -180,9 +180,10 @@ display.root_group = root_group
 def set_status(msg):
     """Show a single status message on row 0, blank row 1."""
     print("Status:", msg)
-    bullets[0].fill = DEFAULT_LINE_COLOR
-    line_labels[0].text = "!"
+    bullets[0].fill = 0x000000
+    line_labels[0].text = ""
     dest_labels[0].text = msg[:18]
+    dest_labels[0].x = 2
     eta_labels[0].text = ""
     clear_row(1)
 
@@ -214,6 +215,9 @@ def render_page(page_entries):
             # For 2-char line names (e.g. SIR) reduce slightly; keep 1-char centered
             line_labels[row].text = line[:2] if len(line) <= 2 else line[:2]
 
+            dest_x = BULLET_PAD_X + BULLET_RADIUS + 3
+            dest_labels[row].x = dest_x
+
             # Truncate destination to fit available space
             # Available: WIDTH - bullet_end - ETA_WIDTH - gaps
             # ETA "99m" * 2 = ~12 chars max. Reserve ~36px for ETAs.
@@ -239,22 +243,33 @@ esp32_reset = DigitalInOut(board.ESP_RESET)
 spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
 
 esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+print("ESP32 initialized")
+time.sleep(1)
 pool = adafruit_esp32spi_socketpool.SocketPool(esp)
 requests = adafruit_requests.Session(pool)
 
 print("Connecting to WiFi:", SSID)
 set_status("Connecting")
 
-try:
-    esp.connect_AP(SSID, PASSWORD)
-    print("Connected. IP:", esp.ip_address)
-    set_status("Connected")
-    time.sleep(1)  # Show connected status briefly
-except Exception as e:
-    print("WiFi error:", e)
-    set_status("WiFi Err")
-    time.sleep(2)  # Show error before continuing
-    # Keep retrying in the main loop via the poll mechanism
+connected = False
+for attempt in range(3):
+    try:
+        print(f"WiFi attempt {attempt + 1}/3")
+        esp.connect_AP(SSID, PASSWORD)
+        print("Connected. IP:", esp.ip_address)
+        set_status("Connected")
+        connected = True
+        time.sleep(1)
+        break
+    except Exception as e:
+        print(f"WiFi error (attempt {attempt + 1}):", e)
+        set_status(f"Retry {attempt + 1}")
+        time.sleep(2)
+
+if not connected:
+    print("Failed to connect after 3 attempts")
+    set_status("WiFi Fail")
+    time.sleep(2)
 
 
 def fetch_data():
