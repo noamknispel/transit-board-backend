@@ -272,6 +272,45 @@ if not connected:
     time.sleep(2)
 
 
+def check_wifi_connection():
+    """Check if WiFi is still connected, reconnect if needed."""
+    try:
+        if not esp.is_connected:
+            print("WiFi disconnected, attempting reconnect...")
+            set_status("Reconnecting")
+            esp.connect_AP(SSID, PASSWORD)
+            print("Reconnected. IP:", esp.ip_address)
+            return True
+        return True
+    except Exception as e:
+        print("Reconnect failed:", e)
+        return False
+
+
+def reset_esp32():
+    """Hard reset the ESP32 coprocessor."""
+    print("Performing ESP32 hard reset...")
+    set_status("Resetting")
+    try:
+        esp32_reset.value = False
+        time.sleep(0.1)
+        esp32_reset.value = True
+        time.sleep(2)
+        # Reinitialize
+        global esp, pool, requests
+        esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+        time.sleep(1)
+        pool = adafruit_esp32spi_socketpool.SocketPool(esp)
+        requests = adafruit_requests.Session(pool)
+        # Reconnect WiFi
+        esp.connect_AP(SSID, PASSWORD)
+        print("Reset complete. IP:", esp.ip_address)
+        return True
+    except Exception as e:
+        print("Reset failed:", e)
+        return False
+
+
 def fetch_data():
     """Fetch transit data from backend. Returns dict with 'active' and 'data' keys, or None on error."""
     url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
@@ -289,6 +328,15 @@ def fetch_data():
             print("HTTP error:", response.status_code)
             response.close()
             return None
+    except OSError as e:
+        # OSError often indicates SPI/network issues
+        error_str = str(e)
+        print("Network error:", error_str)
+        if "SPI" in error_str or "timeout" in error_str.lower():
+            print("SPI timeout detected - will check connection")
+        import traceback
+        traceback.print_exception(e)
+        return None
     except Exception as e:
         print("Fetch error:", e)
         import traceback
@@ -305,6 +353,7 @@ print("Starting main loop")
 entries = []         # full list of transit entries from last poll
 pages = []           # list of 2-entry slices
 current_page = 0
+consecutive_failures = 0  # Track failed fetch attempts
 
 last_poll = -POLL_INTERVAL   # force immediate poll on first iteration
 last_page_flip = time.monotonic()
@@ -315,9 +364,21 @@ while True:
     # --- Poll backend ---
     if (now - last_poll) >= POLL_INTERVAL:
         print("Polling backend...")
+
+        # Progressive recovery based on failure count
+        if consecutive_failures >= 5:
+            print(f"Too many failures ({consecutive_failures}), hard resetting ESP32...")
+            if reset_esp32():
+                consecutive_failures = 0
+        elif consecutive_failures >= 2:
+            print(f"Multiple failures ({consecutive_failures}), checking WiFi...")
+            if check_wifi_connection():
+                consecutive_failures = 0
+
         result = fetch_data()
 
         if result is not None:
+            consecutive_failures = 0  # Reset on success
             # Check if device is active
             is_active = result.get("active", True)  # Default to True for backward compat
 
@@ -341,6 +402,8 @@ while True:
                     current_page = 0
                     render_page(pages[current_page])
         else:
+            consecutive_failures += 1
+            print(f"Fetch failed (consecutive failures: {consecutive_failures})")
             set_status("No data")
             pages = []
 
