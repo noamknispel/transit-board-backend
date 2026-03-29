@@ -1,8 +1,17 @@
 import db from "../db/index";
 
+export enum DeviceStatus {
+  ON = 'on',
+  OFF = 'off',
+  AUTO = 'auto'
+}
+
 export interface Device {
   id: string;
   name: string;
+  status: DeviceStatus;
+  onTime: string | null;
+  offTime: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,5 +40,62 @@ export class DeviceModel {
     const stmt = db.prepare("DELETE FROM devices WHERE id = ?");
     const result = stmt.run(id);
     return result.changes > 0;
+  }
+
+  static update(
+    id: string,
+    updates: { name?: string; status?: DeviceStatus; onTime?: string; offTime?: string }
+  ): Device | undefined {
+    const device = this.getById(id);
+    if (!device) return undefined;
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.name !== undefined) {
+      fields.push('name = ?');
+      values.push(updates.name);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.onTime !== undefined) {
+      fields.push('onTime = ?');
+      values.push(updates.onTime);
+    }
+    if (updates.offTime !== undefined) {
+      fields.push('offTime = ?');
+      values.push(updates.offTime);
+    }
+
+    if (fields.length === 0) return device;
+
+    fields.push('updatedAt = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const stmt = db.prepare(`UPDATE devices SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(...values);
+
+    return this.getById(id);
+  }
+
+  static isDeviceActive(device: Device): boolean {
+    if (device.status === DeviceStatus.ON) return true;
+    if (device.status === DeviceStatus.OFF) return false;
+    if (!device.onTime || !device.offTime) return true; // Default to on if times not set
+
+    const now = new Date();
+    const currentTime = now.getHours().toString().padStart(2, '0') + ':' +
+                        now.getMinutes().toString().padStart(2, '0');
+
+    const { onTime, offTime } = device;
+
+    // Handle midnight crossing (e.g., onTime="22:00", offTime="06:00")
+    if (onTime > offTime) {
+      return currentTime >= onTime || currentTime < offTime;
+    }
+
+    return currentTime >= onTime && currentTime < offTime;
   }
 }

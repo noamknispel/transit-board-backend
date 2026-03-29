@@ -10,6 +10,20 @@ export const router = async (req: Request): Promise<Response> => {
     return deviceController.createDevice(req);
   }
 
+  // GET /devices/:deviceId - Get device info
+  const getDeviceMatch = pathname.match(/^\/devices\/([^\/]+)$/);
+  if (getDeviceMatch && method === "GET") {
+    const deviceId = getDeviceMatch[1];
+    return deviceController.getDevice(deviceId);
+  }
+
+  // PATCH /devices/:deviceId - Update device settings
+  const updateMatch = pathname.match(/^\/devices\/([^\/]+)$/);
+  if (updateMatch && method === "PATCH") {
+    const deviceId = updateMatch[1];
+    return deviceController.updateDevice(req, deviceId);
+  }
+
   // POST /devices/:deviceId/subscribe - Subscribe a device to a stop
   const subscribeMatch = pathname.match(/^\/devices\/([^\/]+)\/subscribe$/);
   if (subscribeMatch && method === "POST") {

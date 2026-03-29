@@ -37,6 +37,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://192.168.1.1:3010")
 DEVICE_ID = os.getenv("DEVICE_ID", "")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
 PAGE_DURATION = int(os.getenv("PAGE_DURATION", "5"))
+DISPLAY_ROTATION = int(os.getenv("DISPLAY_ROTATION", "0"))
 
 # ---------------------------------------------------------------------------
 # MTA Line Colors
@@ -54,6 +55,7 @@ LINE_COLORS = {
     "SIR": 0x0039A6,
 }
 DEFAULT_LINE_COLOR = 0x4D5357  # dark gray fallback
+BLACK_TEXT_LINES = ["N", "Q", "R", "W", "B", "D", "F", "M"]
 
 # Display dimensions
 WIDTH = 128
@@ -91,7 +93,7 @@ try:
 
     display = framebufferio.FramebufferDisplay(matrix, auto_refresh=True)
     display.brightness = 0.8
-    print("Display initialized successfully")
+    display.rotation = DISPLAY_ROTATION
 except Exception as e:
     print("DISPLAY INIT ERROR:", e)
     import traceback
@@ -180,18 +182,26 @@ display.root_group = root_group
 def set_status(msg):
     """Show a single status message on row 0, blank row 1."""
     print("Status:", msg)
-    bullets[0].fill = DEFAULT_LINE_COLOR
-    line_labels[0].text = "!"
+    bullets[0].fill = 0x000000
+    line_labels[0].text = ""
     dest_labels[0].text = msg[:18]
+    dest_labels[0].x = 2
     eta_labels[0].text = ""
     clear_row(1)
 
 
 def clear_row(row):
-    bullets[row].fill = DEFAULT_LINE_COLOR
-    line_labels[row].text = " "
+    bullets[row].fill = 0x000000
+    line_labels[row].text = ""
+    line_labels[row].color = 0xFFFFFF
     dest_labels[row].text = ""
     eta_labels[row].text = ""
+
+
+def clear_display():
+    """Clear the entire display (blank/off state)."""
+    for row in range(ROWS):
+        clear_row(row)
 
 
 def render_page(page_entries):
@@ -207,6 +217,14 @@ def render_page(page_entries):
 
             # For 2-char line names (e.g. SIR) reduce slightly; keep 1-char centered
             line_labels[row].text = line[:2] if len(line) <= 2 else line[:2]
+
+            if line in BLACK_TEXT_LINES:
+                line_labels[row].color = 0x000000  # Black
+            else:
+                line_labels[row].color = 0xFFFFFF  # White
+
+            dest_x = BULLET_PAD_X + BULLET_RADIUS + 3
+            dest_labels[row].x = dest_x
 
             # Truncate destination to fit available space
             # Available: WIDTH - bullet_end - ETA_WIDTH - gaps
@@ -233,26 +251,76 @@ esp32_reset = DigitalInOut(board.ESP_RESET)
 spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
 
 esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+print("ESP32 initialized")
+time.sleep(1)
 pool = adafruit_esp32spi_socketpool.SocketPool(esp)
 requests = adafruit_requests.Session(pool)
 
 print("Connecting to WiFi:", SSID)
 set_status("Connecting")
 
-try:
-    esp.connect_AP(SSID, PASSWORD)
-    print("Connected. IP:", esp.ip_address)
-    set_status("Connected")
-    time.sleep(1)  # Show connected status briefly
-except Exception as e:
-    print("WiFi error:", e)
-    set_status("WiFi Err")
-    time.sleep(2)  # Show error before continuing
-    # Keep retrying in the main loop via the poll mechanism
+connected = False
+for attempt in range(3):
+    try:
+        print(f"WiFi attempt {attempt + 1}/3")
+        esp.connect_AP(SSID, PASSWORD)
+        print("Connected. IP:", esp.ip_address)
+        set_status("Connected")
+        connected = True
+        time.sleep(1)
+        break
+    except Exception as e:
+        print(f"WiFi error (attempt {attempt + 1}):", e)
+        set_status(f"Retry {attempt + 1}")
+        time.sleep(2)
+
+if not connected:
+    print("Failed to connect after 3 attempts")
+    set_status("WiFi Fail")
+    time.sleep(2)
+
+
+def check_wifi_connection():
+    """Check if WiFi is still connected, reconnect if needed."""
+    try:
+        if not esp.is_connected:
+            print("WiFi disconnected, attempting reconnect...")
+            set_status("Reconnecting")
+            esp.connect_AP(SSID, PASSWORD)
+            print("Reconnected. IP:", esp.ip_address)
+            return True
+        return True
+    except Exception as e:
+        print("Reconnect failed:", e)
+        return False
+
+
+def reset_esp32():
+    """Hard reset the ESP32 coprocessor."""
+    print("Performing ESP32 hard reset...")
+    set_status("Resetting")
+    try:
+        esp32_reset.value = False
+        time.sleep(0.1)
+        esp32_reset.value = True
+        time.sleep(2)
+        # Reinitialize
+        global esp, pool, requests
+        esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+        time.sleep(1)
+        pool = adafruit_esp32spi_socketpool.SocketPool(esp)
+        requests = adafruit_requests.Session(pool)
+        # Reconnect WiFi
+        esp.connect_AP(SSID, PASSWORD)
+        print("Reset complete. IP:", esp.ip_address)
+        return True
+    except Exception as e:
+        print("Reset failed:", e)
+        return False
 
 
 def fetch_data():
-    """Fetch transit data from backend. Returns list of entries or None on error."""
+    """Fetch transit data from backend. Returns dict with 'active' and 'data' keys, or None on error."""
     url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
     print("Fetching:", url)
     try:
@@ -260,13 +328,23 @@ def fetch_data():
         print("Response status:", response.status_code)
         if response.status_code == 200:
             payload = response.json()
-            print("Data entries:", len(payload.get("data", [])))
+            print("Active:", payload.get("active", True))
+            print("Data entries:", len(payload.get("data", [])) if payload.get("data") else 0)
             response.close()
-            return payload.get("data", [])
+            return payload
         else:
             print("HTTP error:", response.status_code)
             response.close()
             return None
+    except OSError as e:
+        # OSError often indicates SPI/network issues
+        error_str = str(e)
+        print("Network error:", error_str)
+        if "SPI" in error_str or "timeout" in error_str.lower():
+            print("SPI timeout detected - will check connection")
+        import traceback
+        traceback.print_exception(e)
+        return None
     except Exception as e:
         print("Fetch error:", e)
         import traceback
@@ -283,6 +361,7 @@ print("Starting main loop")
 entries = []         # full list of transit entries from last poll
 pages = []           # list of 2-entry slices
 current_page = 0
+consecutive_failures = 0  # Track failed fetch attempts
 
 last_poll = -POLL_INTERVAL   # force immediate poll on first iteration
 last_page_flip = time.monotonic()
@@ -293,21 +372,46 @@ while True:
     # --- Poll backend ---
     if (now - last_poll) >= POLL_INTERVAL:
         print("Polling backend...")
+
+        # Progressive recovery based on failure count
+        if consecutive_failures >= 5:
+            print(f"Too many failures ({consecutive_failures}), hard resetting ESP32...")
+            if reset_esp32():
+                consecutive_failures = 0
+        elif consecutive_failures >= 2:
+            print(f"Multiple failures ({consecutive_failures}), checking WiFi...")
+            if check_wifi_connection():
+                consecutive_failures = 0
+
         result = fetch_data()
 
         if result is not None:
-            entries = result
-            
-            # Check if we have any entries
-            if len(entries) == 0:
-                set_status("No trains")
+            consecutive_failures = 0  # Reset on success
+            # Check if device is active
+            is_active = result.get("active", True)  # Default to True for backward compat
+
+            if not is_active:
+                # Device is off - clear display
+                print("Device is inactive (off/outside schedule)")
+                clear_display()
+                entries = []
                 pages = []
             else:
-                # Build pages: chunks of 2 entries
-                pages = [entries[i:i + ROWS] for i in range(0, len(entries), ROWS)]
-                current_page = 0
-                render_page(pages[current_page])
+                # Device is active - process data
+                entries = result.get("data", [])
+
+                # Check if we have any entries
+                if len(entries) == 0:
+                    set_status("No trains")
+                    pages = []
+                else:
+                    # Build pages: chunks of 2 entries
+                    pages = [entries[i:i + ROWS] for i in range(0, len(entries), ROWS)]
+                    current_page = 0
+                    render_page(pages[current_page])
         else:
+            consecutive_failures += 1
+            print(f"Fetch failed (consecutive failures: {consecutive_failures})")
             set_status("No data")
             pages = []
 

@@ -1,4 +1,4 @@
-import { DeviceModel } from "../models/device";
+import { DeviceModel, DeviceStatus } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
 import { RealtimeService } from "../services/realtime";
 
@@ -82,6 +82,26 @@ export const deleteSubscription = async (
   }
 };
 
+export const getDevice = async (deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) {
+    return jsonResponse({ error: "Device not found" }, 404);
+  }
+
+  const active = DeviceModel.isDeviceActive(device);
+
+  return jsonResponse({
+    device: {
+      id: device.id,
+      name: device.name,
+      status: device.status,
+      onTime: device.onTime,
+      offTime: device.offTime,
+      active,
+    },
+  });
+};
+
 export const listSubscriptions = async (deviceId: string) => {
   const device = DeviceModel.getById(deviceId);
   if (!device) {
@@ -98,6 +118,12 @@ export const getDeviceData = async (deviceId: string) => {
     return jsonResponse({ error: "Device not found" }, 404);
   }
 
+  const active = DeviceModel.isDeviceActive(device);
+
+  if (!active) {
+    return jsonResponse({ active: false, data: null });
+  }
+
   const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
   const data = await realtimeService.getArrivalsForMultipleStops(
@@ -108,5 +134,38 @@ export const getDeviceData = async (deviceId: string) => {
     })),
   );
 
-  return jsonResponse({ data });
+  return jsonResponse({ active: true, data });
+};
+
+export const updateDevice = async (req: Request, deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) {
+    return jsonResponse({ error: "Device not found" }, 404);
+  }
+
+  try {
+    const body = (await req.json()) as {
+      name?: string;
+      status?: DeviceStatus;
+      onTime?: string;
+      offTime?: string;
+    };
+
+    const timeRegex = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (body.onTime && !timeRegex.test(body.onTime)) {
+      return jsonResponse({ error: "Invalid onTime format. Use HH:MM (00:00-23:59)" }, 400);
+    }
+    if (body.offTime && !timeRegex.test(body.offTime)) {
+      return jsonResponse({ error: "Invalid offTime format. Use HH:MM (00:00-23:59)" }, 400);
+    }
+
+    if (body.status && !Object.values(DeviceStatus).includes(body.status)) {
+      return jsonResponse({ error: `Invalid status. Must be one of: ${Object.values(DeviceStatus).join(', ')}` }, 400);
+    }
+
+    const updatedDevice = DeviceModel.update(deviceId, body);
+    return jsonResponse({ device: updatedDevice });
+  } catch (error) {
+    return jsonResponse({ error: "Invalid request" }, 400);
+  }
 };
