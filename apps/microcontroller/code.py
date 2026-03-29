@@ -55,6 +55,7 @@ LINE_COLORS = {
     "SIR": 0x0039A6,
 }
 DEFAULT_LINE_COLOR = 0x4D5357  # dark gray fallback
+BLACK_TEXT_LINES = ["N", "Q", "R", "W", "B", "D", "F", "M"]
 
 # Display dimensions
 WIDTH = 128
@@ -192,6 +193,7 @@ def set_status(msg):
 def clear_row(row):
     bullets[row].fill = 0x000000
     line_labels[row].text = ""
+    line_labels[row].color = 0xFFFFFF
     dest_labels[row].text = ""
     eta_labels[row].text = ""
 
@@ -215,6 +217,11 @@ def render_page(page_entries):
 
             # For 2-char line names (e.g. SIR) reduce slightly; keep 1-char centered
             line_labels[row].text = line[:2] if len(line) <= 2 else line[:2]
+
+            if line in BLACK_TEXT_LINES:
+                line_labels[row].color = 0x000000  # Black
+            else:
+                line_labels[row].color = 0xFFFFFF  # White
 
             dest_x = BULLET_PAD_X + BULLET_RADIUS + 3
             dest_labels[row].x = dest_x
