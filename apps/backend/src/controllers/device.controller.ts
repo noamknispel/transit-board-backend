@@ -1,4 +1,4 @@
-import { DeviceModel } from "../models/device";
+import { DeviceModel, DeviceStatus } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
 import { RealtimeService } from "../services/realtime";
 
@@ -98,7 +98,6 @@ export const getDeviceData = async (deviceId: string) => {
     return jsonResponse({ error: "Device not found" }, 404);
   }
 
-  // Check if device is active based on status and time settings
   const active = DeviceModel.isDeviceActive(device);
 
   if (!active) {
@@ -127,12 +126,11 @@ export const updateDevice = async (req: Request, deviceId: string) => {
   try {
     const body = (await req.json()) as {
       name?: string;
-      status?: 'on' | 'off' | 'auto';
+      status?: DeviceStatus;
       onTime?: string;
       offTime?: string;
     };
 
-    // Validate time format if provided
     const timeRegex = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
     if (body.onTime && !timeRegex.test(body.onTime)) {
       return jsonResponse({ error: "Invalid onTime format. Use HH:MM (00:00-23:59)" }, 400);
@@ -141,9 +139,8 @@ export const updateDevice = async (req: Request, deviceId: string) => {
       return jsonResponse({ error: "Invalid offTime format. Use HH:MM (00:00-23:59)" }, 400);
     }
 
-    // Validate status value
-    if (body.status && !['on', 'off', 'auto'].includes(body.status)) {
-      return jsonResponse({ error: "Invalid status. Must be 'on', 'off', or 'auto'" }, 400);
+    if (body.status && !Object.values(DeviceStatus).includes(body.status)) {
+      return jsonResponse({ error: `Invalid status. Must be one of: ${Object.values(DeviceStatus).join(', ')}` }, 400);
     }
 
     const updatedDevice = DeviceModel.update(deviceId, body);

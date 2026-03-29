@@ -189,7 +189,7 @@ def set_status(msg):
 
 
 def clear_row(row):
-    bullets[row].fill = 0x000000  # Black (invisible on black background)
+    bullets[row].fill = 0x000000
     line_labels[row].text = ""
     dest_labels[row].text = ""
     eta_labels[row].text = ""

@@ -1,9 +1,15 @@
 import db from "../db/index";
 
+export enum DeviceStatus {
+  ON = 'on',
+  OFF = 'off',
+  AUTO = 'auto'
+}
+
 export interface Device {
   id: string;
   name: string;
-  status: 'on' | 'off' | 'auto';
+  status: DeviceStatus;
   onTime: string | null;
   offTime: string | null;
   createdAt: string;
@@ -38,7 +44,7 @@ export class DeviceModel {
 
   static update(
     id: string,
-    updates: { name?: string; status?: 'on' | 'off' | 'auto'; onTime?: string; offTime?: string }
+    updates: { name?: string; status?: DeviceStatus; onTime?: string; offTime?: string }
   ): Device | undefined {
     const device = this.getById(id);
     if (!device) return undefined;
@@ -75,10 +81,8 @@ export class DeviceModel {
   }
 
   static isDeviceActive(device: Device): boolean {
-    if (device.status === 'on') return true;
-    if (device.status === 'off') return false;
-
-    // status === 'auto'
+    if (device.status === DeviceStatus.ON) return true;
+    if (device.status === DeviceStatus.OFF) return false;
     if (!device.onTime || !device.offTime) return true; // Default to on if times not set
 
     const now = new Date();
@@ -92,7 +96,6 @@ export class DeviceModel {
       return currentTime >= onTime || currentTime < offTime;
     }
 
-    // Normal time window (e.g., onTime="07:00", offTime="23:00")
     return currentTime >= onTime && currentTime < offTime;
   }
 }
