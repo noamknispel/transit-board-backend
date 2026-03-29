@@ -37,7 +37,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://192.168.1.1:3010")
 DEVICE_ID = os.getenv("DEVICE_ID", "")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
 PAGE_DURATION = int(os.getenv("PAGE_DURATION", "5"))
-DISPLAY_ROTATION = int(os.getenv("DISPLAY_ROTATION", "0")
+DISPLAY_ROTATION = int(os.getenv("DISPLAY_ROTATION", "0"))
 
 # ---------------------------------------------------------------------------
 # MTA Line Colors
