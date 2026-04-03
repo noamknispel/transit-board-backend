@@ -1,6 +1,7 @@
 import type { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3010';
+// Use relative URLs in production (served by backend), or VITE_API_URL for local dev
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
