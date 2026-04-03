@@ -1,6 +1,8 @@
 import { DeviceModel } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
 import { RealtimeService } from "../services/realtime";
+import { WidgetModel } from "../models/widget.js";
+import { getWidgetsData } from "./widget.controller.js";
 
 const realtimeService = new RealtimeService();
 
@@ -98,8 +100,17 @@ export const getDeviceData = async (deviceId: string) => {
     return jsonResponse({ error: "Device not found" }, 404);
   }
 
-  const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
+  // Check if device has widgets configured
+  const widgets = WidgetModel.getByDeviceId(deviceId, true); // enabled only
 
+  if (widgets.length > 0) {
+    // New widget-based format
+    const widgetsWithData = await getWidgetsData(deviceId);
+    return jsonResponse({ widgets: widgetsWithData });
+  }
+
+  // Backward compatibility: if no widgets, return old format
+  const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
   const data = await realtimeService.getArrivalsForMultipleStops(
     subscriptions.map((sub) => ({
       stopId: sub.stopId,
