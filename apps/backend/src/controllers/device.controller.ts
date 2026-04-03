@@ -1,5 +1,6 @@
 import { DeviceModel } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
+import { GTFSStopModel } from "../models/gtfs";
 import { getWidgetsData } from "./widget.controller.js";
 
 const jsonResponse = (data: any, status = 200) => {
@@ -87,7 +88,24 @@ export const listSubscriptions = async (deviceId: string) => {
   }
 
   const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
-  return jsonResponse({ subscriptions });
+  
+  // Enrich subscriptions with stop names from GTFS data
+  const enrichedSubscriptions = subscriptions.map((sub) => {
+    const stop = GTFSStopModel.getByIdWithFallback(sub.stopId);
+    const stopName = stop?.stop_name || sub.stopId;
+    
+    return {
+      id: sub.id,
+      deviceId: sub.deviceId,
+      stopId: sub.stopId,
+      routeId: sub.line, // Map 'line' to 'routeId' for frontend
+      direction: sub.direction === 'uptown' || sub.direction === 'north' ? 0 : 1,
+      stopName: stopName,
+      createdAt: sub.createdAt,
+    };
+  });
+  
+  return jsonResponse({ subscriptions: enrichedSubscriptions });
 };
 
 export const getDeviceData = async (deviceId: string) => {
