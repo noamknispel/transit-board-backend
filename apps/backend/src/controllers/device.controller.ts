@@ -50,6 +50,29 @@ export const createSubscription = async (req: Request, deviceId: string) => {
       normalizedDirection = "downtown";
     }
 
+    // Validate that the requested line actually serves this stop.
+    // Accept matching by either route_short_name (e.g. "2") or route_id.
+    const availableRoutes = GTFSRouteModel.getRoutesByStop(stopId);
+    const requestedLine = (body.line || "").trim().toUpperCase();
+    const servesStop = availableRoutes.some((route) => {
+      const shortName = (route.route_short_name || "").toUpperCase();
+      const routeId = (route.route_id || "").toUpperCase();
+      return requestedLine === shortName || requestedLine === routeId;
+    });
+
+    if (!servesStop) {
+      const available = availableRoutes
+        .map((r) => r.route_short_name || r.route_id)
+        .filter((v): v is string => Boolean(v));
+      return jsonResponse(
+        {
+          error: `Line ${body.line} does not serve stop ${stopId}`,
+          availableLines: available,
+        },
+        400,
+      );
+    }
+
     const subscription = SubscriptionModel.create(
       deviceId,
       body.provider,
