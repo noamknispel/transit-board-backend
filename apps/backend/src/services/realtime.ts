@@ -161,9 +161,26 @@ export class RealtimeService {
         const route = GTFSRouteModel.getById(routeId);
         dbLookupTime += Date.now() - dbStart;
 
-        if (!route || route.route_short_name !== line) continue;
+        if (!route) continue;
 
-        if (!this.matchesDirection(tripId, direction)) continue;
+        // Accept either GTFS short name ("A", "1") or route_id when matching line.
+        const requestedLine = line.toUpperCase();
+        const routeShortName = (route.route_short_name || "").toUpperCase();
+        const routeIdUpper = route.route_id.toUpperCase();
+        if (
+          requestedLine !== routeShortName &&
+          requestedLine !== routeIdUpper
+        ) {
+          continue;
+        }
+
+        // If stopId is directional (N/S), it already encodes direction, so avoid
+        // strict tripId direction filtering which can drop valid arrivals.
+        const directionalStopId =
+          stopId.endsWith("N") || stopId.endsWith("S");
+        if (!directionalStopId && !this.matchesDirection(tripId, direction)) {
+          continue;
+        }
 
         if (!tripUpdate.stop_time_update) continue;
 
