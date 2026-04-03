@@ -5,7 +5,6 @@ import { DeviceSelector } from './components/DeviceSelector';
 import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
-import { SubscriptionManager } from './components/SubscriptionManager';
 
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -197,12 +196,6 @@ function App() {
 
         {selectedDeviceId && (
           <>
-            <SubscriptionManager
-              deviceId={selectedDeviceId}
-              subscriptions={subscriptions}
-              onSubscriptionsChanged={loadSubscriptions}
-            />
-            
             {loading && !widgets.length ? (
               <div className="text-center py-12">
                 <p className="text-gray-500">Loading...</p>
@@ -235,6 +228,8 @@ function App() {
           onSave={handleSaveWidget}
           editWidget={editingWidget}
           subscriptions={subscriptions}
+          deviceId={selectedDeviceId || undefined}
+          onSubscriptionsChanged={loadSubscriptions}
         />
       </div>
     </div>

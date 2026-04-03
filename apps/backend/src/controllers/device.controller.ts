@@ -1,6 +1,6 @@
 import { DeviceModel } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
-import { GTFSStopModel } from "../models/gtfs";
+import { GTFSStopModel, GTFSRouteModel } from "../models/gtfs";
 import { getWidgetsData } from "./widget.controller.js";
 
 const jsonResponse = (data: any, status = 200) => {
@@ -128,17 +128,37 @@ export const searchStops = async (req: Request) => {
   }
   
   const stops = GTFSStopModel.searchByName(query);
+
+  // Use platform stops so subscriptions can target directional stop IDs (e.g. 211N/211S).
+  const platformStops = stops
+    .filter((stop) => stop.location_type === 0)
+    .slice(0, 100)
+    .map((stop) => {
+      const suffix = stop.stop_id.endsWith("N")
+        ? " (North/Uptown)"
+        : stop.stop_id.endsWith("S")
+          ? " (South/Downtown)"
+          : "";
+      return {
+        stopId: stop.stop_id,
+        stopName: `${stop.stop_name}${suffix}`,
+        lat: stop.stop_lat,
+        lon: stop.stop_lon,
+      };
+    });
+
+  return jsonResponse({ stops: platformStops });
+};
+
+export const getStopRoutes = async (stopId: string) => {
+  const routes = GTFSRouteModel.getRoutesByStop(stopId);
   
-  // Filter to only stations (not individual platforms) and limit results
-  const stations = stops
-    .filter(stop => stop.location_type === 1)
-    .slice(0, 50)
-    .map(stop => ({
-      stopId: stop.stop_id,
-      stopName: stop.stop_name,
-      lat: stop.stop_lat,
-      lon: stop.stop_lon,
-    }));
+  const routeList = routes.map(route => ({
+    routeId: route.route_id,
+    routeShortName: route.route_short_name,
+    routeLongName: route.route_long_name,
+    color: route.route_color,
+  }));
   
-  return jsonResponse({ stops: stations });
+  return jsonResponse({ routes: routeList });
 };

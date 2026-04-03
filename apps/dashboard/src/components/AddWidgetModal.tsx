@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Widget, WidgetType, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
+import { api } from '../api/client';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -7,9 +8,11 @@ interface AddWidgetModalProps {
   onSave: (data: CreateWidgetRequest | UpdateWidgetRequest) => Promise<void>;
   editWidget?: Widget | null;
   subscriptions?: Subscription[];
+  deviceId?: string;
+  onSubscriptionsChanged?: () => Promise<void> | void;
 }
 
-export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscriptions = [] }: AddWidgetModalProps) {
+export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscriptions = [], deviceId, onSubscriptionsChanged }: AddWidgetModalProps) {
   const [widgetType, setWidgetType] = useState<WidgetType>('message');
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled] = useState(true);
@@ -26,6 +29,15 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
 
   // Transit widget state
   const [transitSubscriptions, setTransitSubscriptions] = useState<number[]>([]);
+  
+  // Stop search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ stopId: string; stopName: string }[]>([]);
+  const [selectedStop, setSelectedStop] = useState<{ stopId: string; stopName: string } | null>(null);
+  const [availableRoutes, setAvailableRoutes] = useState<{ routeId: string; routeShortName: string }[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState('');
+  const [selectedDirection, setSelectedDirection] = useState('uptown');
+  const [addingSubscription, setAddingSubscription] = useState(false);
 
   useEffect(() => {
     if (editWidget) {
@@ -62,6 +74,71 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
       setTransitSubscriptions([]);
     }
   }, [editWidget, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || widgetType !== 'transit') return;
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await api.searchStops(searchQuery.trim());
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, widgetType, searchQuery]);
+
+  const handleSelectStop = async (stop: { stopId: string; stopName: string }) => {
+    setSelectedStop(stop);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedRoute('');
+
+    try {
+      const routes = await api.getStopRoutes(stop.stopId);
+      const normalized = routes.map((r) => ({
+        routeId: r.routeId,
+        routeShortName: r.routeShortName || r.routeId,
+      }));
+      setAvailableRoutes(normalized);
+      if (normalized.length > 0) {
+        setSelectedRoute(normalized[0].routeShortName);
+      }
+    } catch {
+      setAvailableRoutes([]);
+    }
+  };
+
+  const handleAddSubscription = async () => {
+    if (!deviceId || !selectedStop || !selectedRoute || addingSubscription) return;
+
+    try {
+      setAddingSubscription(true);
+      await api.createSubscription(deviceId, {
+        provider: 'mta',
+        line: selectedRoute,
+        direction: selectedDirection,
+        stopId: selectedStop.stopId,
+      });
+
+      if (onSubscriptionsChanged) {
+        await onSubscriptionsChanged();
+      }
+
+      setSelectedStop(null);
+      setAvailableRoutes([]);
+      setSelectedRoute('');
+      setSelectedDirection('uptown');
+    } finally {
+      setAddingSubscription(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,11 +277,78 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
 
           {widgetType === 'transit' && (
             <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Add stop subscription</label>
+
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search stop name (e.g. Pelham, Times Sq)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
+              />
+
+              {searchResults.length > 0 && (
+                <div className="border border-gray-300 rounded-md max-h-40 overflow-y-auto mb-3">
+                  {searchResults.map((stop) => (
+                    <button
+                      key={stop.stopId}
+                      type="button"
+                      onClick={() => handleSelectStop(stop)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0"
+                    >
+                      {stop.stopName}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedStop && (
+                <div className="border border-gray-300 rounded-md p-3 mb-3 bg-gray-50">
+                  <p className="text-sm mb-2"><strong>Stop:</strong> {selectedStop.stopName}</p>
+
+                  <label className="block text-sm font-medium mb-1">Line</label>
+                  <select
+                    value={selectedRoute}
+                    onChange={(e) => setSelectedRoute(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
+                  >
+                    {availableRoutes.length === 0 ? (
+                      <option value="">No lines found for this stop</option>
+                    ) : (
+                      availableRoutes.map((route) => (
+                        <option key={route.routeId} value={route.routeShortName}>
+                          {route.routeShortName}
+                        </option>
+                      ))
+                    )}
+                  </select>
+
+                  <label className="block text-sm font-medium mb-1">Direction</label>
+                  <select
+                    value={selectedDirection}
+                    onChange={(e) => setSelectedDirection(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md mb-3"
+                  >
+                    <option value="uptown">Uptown / North</option>
+                    <option value="downtown">Downtown / South</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleAddSubscription}
+                    disabled={!selectedRoute || availableRoutes.length === 0 || addingSubscription}
+                    className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
+                  >
+                    {addingSubscription ? 'Adding...' : 'Add Subscription'}
+                  </button>
+                </div>
+              )}
+
               <label className="block text-sm font-medium mb-2">
-                Transit Routes {transitSubscriptions.length === 0 && '(all routes)'}
+                Transit routes to display {transitSubscriptions.length === 0 && '(all routes)'}
               </label>
               {subscriptions.length === 0 ? (
-                <p className="text-gray-500 text-sm">No subscriptions available for this device</p>
+                <p className="text-gray-500 text-sm">No subscriptions yet for this device</p>
               ) : (
                 <div className="border border-gray-300 rounded-md p-3 max-h-60 overflow-y-auto">
                   {subscriptions.map((sub) => (
@@ -223,7 +367,7 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
                 </div>
               )}
               <p className="text-xs text-gray-500 mt-2">
-                Leave unselected to show all routes, or select specific routes to display
+                Leave unselected to show all subscriptions, or select specific ones
               </p>
             </div>
           )}

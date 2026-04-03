@@ -92,6 +92,11 @@ class ApiClient {
     const response = await this.request<{ stops: { stopId: string; stopName: string; lat?: number; lon?: number }[] }>(`/stops/search?q=${encodeURIComponent(query)}`);
     return response.stops;
   }
+
+  async getStopRoutes(stopId: string): Promise<{ routeId: string; routeShortName: string; routeLongName: string; color?: string }[]> {
+    const response = await this.request<{ routes: { routeId: string; routeShortName: string; routeLongName: string; color?: string }[] }>(`/stops/${encodeURIComponent(stopId)}/routes`);
+    return response.routes;
+  }
 }
 
 export const api = new ApiClient();

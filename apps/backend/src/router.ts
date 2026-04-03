@@ -16,6 +16,13 @@ export const router = async (req: Request): Promise<Response> => {
     return deviceController.searchStops(req);
   }
 
+  // GET /stops/:stopId/routes - Get routes that serve a stop
+  const stopRoutesMatch = pathname.match(/^\/stops\/([^\/]+)\/routes$/);
+  if (stopRoutesMatch && method === "GET") {
+    const stopId = stopRoutesMatch[1];
+    return deviceController.getStopRoutes(stopId);
+  }
+
   // POST /devices/:deviceId/subscribe - Subscribe a device to a stop
   const subscribeMatch = pathname.match(/^\/devices\/([^\/]+)\/subscribe$/);
   if (subscribeMatch && method === "POST") {
