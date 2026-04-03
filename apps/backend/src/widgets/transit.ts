@@ -42,12 +42,19 @@ export class TransitWidgetPlugin implements WidgetPlugin {
     this.validateConfig(config);
 
     // Get subscriptions for this device
-    let subscriptions = SubscriptionModel.getByDeviceId(deviceId);
+    const allSubscriptions = SubscriptionModel.getByDeviceId(deviceId);
+    let subscriptions = allSubscriptions;
 
     // If specific subscription IDs are provided, filter to those
     if (config.subscriptionIds && config.subscriptionIds.length > 0) {
       const requestedIds = new Set(config.subscriptionIds);
-      subscriptions = subscriptions.filter(sub => requestedIds.has(sub.id));
+      subscriptions = subscriptions.filter((sub) => requestedIds.has(sub.id));
+
+      // If widget references stale/deleted IDs, fall back to all current subscriptions
+      // to avoid silent "arrivals: []" failures.
+      if (subscriptions.length === 0 && allSubscriptions.length > 0) {
+        subscriptions = allSubscriptions;
+      }
     }
 
     if (subscriptions.length === 0) {
