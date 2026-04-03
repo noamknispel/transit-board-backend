@@ -187,7 +187,8 @@ def render_transit_widget(widget_data):
     Line 0: Line# LastStop    ETAm ETAm
     Line 1: Line# LastStop    ETAm ETAm
     """
-    routes = widget_data.get("routes", [])
+    # Backend transit widget returns `arrivals`; keep `routes` as fallback.
+    routes = widget_data.get("arrivals") or widget_data.get("routes", [])
     if not routes:
         set_status("No trains")
         return
