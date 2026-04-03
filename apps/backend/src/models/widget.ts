@@ -179,7 +179,7 @@ export class WidgetModel {
   /**
    * Parse widget config from JSON string to object
    */
-  static parseWidget(widget: Widget): Widget & { config: object } {
+  static parseWidget(widget: Widget): any {
     return {
       ...widget,
       config: JSON.parse(widget.config),
@@ -189,7 +189,7 @@ export class WidgetModel {
   /**
    * Parse multiple widgets
    */
-  static parseWidgets(widgets: Widget[]): (Widget & { config: object })[] {
+  static parseWidgets(widgets: Widget[]): any[] {
     return widgets.map(w => this.parseWidget(w));
   }
 }

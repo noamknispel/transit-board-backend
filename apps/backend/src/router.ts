@@ -80,5 +80,27 @@ export const router = async (req: Request): Promise<Response> => {
     return widgetController.deleteWidget(widgetId);
   }
 
+  // Serve dashboard static files
+  if (pathname.startsWith("/dashboard")) {
+    const dashboardPath = pathname === "/dashboard" || pathname === "/dashboard/" 
+      ? "/dashboard/index.html" 
+      : pathname;
+    
+    const filePath = `${import.meta.dir}/../../dashboard/dist${dashboardPath.replace("/dashboard", "")}`;
+    const file = Bun.file(filePath);
+    
+    if (await file.exists()) {
+      return new Response(file);
+    }
+    
+    // If file not found and it's a dashboard route, serve index.html (for client-side routing)
+    if (pathname.startsWith("/dashboard/")) {
+      const indexFile = Bun.file(`${import.meta.dir}/../../dashboard/dist/index.html`);
+      if (await indexFile.exists()) {
+        return new Response(indexFile);
+      }
+    }
+  }
+
   return new Response("Not Found", { status: 404 });
 };
