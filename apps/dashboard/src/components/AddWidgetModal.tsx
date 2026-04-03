@@ -140,6 +140,22 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
     }
   };
 
+  const handleDeleteSubscription = async (subscriptionId: number) => {
+    if (!deviceId) return;
+    if (!confirm('Delete this subscription?')) return;
+
+    try {
+      setAddingSubscription(true);
+      await api.deleteSubscription(deviceId, subscriptionId);
+      setTransitSubscriptions((prev) => prev.filter((id) => id !== subscriptionId));
+      if (onSubscriptionsChanged) {
+        await onSubscriptionsChanged();
+      }
+    } finally {
+      setAddingSubscription(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -352,17 +368,26 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
               ) : (
                 <div className="border border-gray-300 rounded-md p-3 max-h-60 overflow-y-auto">
                   {subscriptions.map((sub) => (
-                    <label key={sub.id} className="flex items-center py-2 hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={transitSubscriptions.includes(sub.id)}
-                        onChange={() => toggleSubscription(sub.id)}
-                        className="mr-3"
-                      />
-                      <span className="text-sm">
-                        <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
-                      </span>
-                    </label>
+                    <div key={sub.id} className="flex items-center justify-between py-2 hover:bg-gray-50">
+                      <label className="flex items-center cursor-pointer flex-1">
+                        <input
+                          type="checkbox"
+                          checked={transitSubscriptions.includes(sub.id)}
+                          onChange={() => toggleSubscription(sub.id)}
+                          className="mr-3"
+                        />
+                        <span className="text-sm">
+                          <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubscription(sub.id)}
+                        className="ml-3 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

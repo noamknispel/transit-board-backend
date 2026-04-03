@@ -146,6 +146,31 @@ export class RealtimeService {
     return true;
   }
 
+  private matchesDirectionForStop(
+    tripId: string,
+    requestedDirection: string,
+    realtimeStopId: string,
+  ): boolean {
+    const directionUpper = (requestedDirection || "").toUpperCase();
+    const stopIdUpper = (realtimeStopId || "").toUpperCase();
+
+    // Prefer explicit platform suffix from realtime stop_id.
+    if (stopIdUpper.endsWith("N")) {
+      return (
+        directionUpper.includes("NORTH") || directionUpper.includes("UPTOWN")
+      );
+    }
+    if (stopIdUpper.endsWith("S")) {
+      return (
+        directionUpper.includes("SOUTH") ||
+        directionUpper.includes("DOWNTOWN")
+      );
+    }
+
+    // Fallback to legacy trip_id direction pattern.
+    return this.matchesDirection(tripId, requestedDirection);
+  }
+
   private async getArrivalsForStop(
     stopId: string,
     line: string,
@@ -195,18 +220,20 @@ export class RealtimeService {
           continue;
         }
 
-        // If stopId is directional (N/S), it already encodes direction, so avoid
-        // strict tripId direction filtering which can drop valid arrivals.
-        const directionalStopId =
-          stopId.endsWith("N") || stopId.endsWith("S");
-        if (!directionalStopId && !this.matchesDirection(tripId, direction)) {
-          continue;
-        }
-
         if (!tripUpdate.stop_time_update) continue;
 
         for (const stopTimeUpdate of tripUpdate.stop_time_update) {
           if (!this.stopMatches(stopId, stopTimeUpdate.stop_id || "")) {
+            continue;
+          }
+
+          if (
+            !this.matchesDirectionForStop(
+              tripId,
+              direction,
+              stopTimeUpdate.stop_id || "",
+            )
+          ) {
             continue;
           }
 
