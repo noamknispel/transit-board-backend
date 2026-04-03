@@ -25,8 +25,6 @@ from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_socketpool
 import adafruit_requests
 from adafruit_display_text import label
-from adafruit_display_shapes.rect import Rect
-from adafruit_display_shapes.circle import Circle
 
 # ---------------------------------------------------------------------------
 # Config
@@ -106,68 +104,51 @@ except Exception as e:
 root_group = displayio.Group()
 
 # Per-row UI elements — built once, updated each page flip
-bullets = []       # Circle (bullet background)
-line_labels = []   # label — line letter(s) inside bullet
-dest_labels = []   # label — truncated destination
-eta_labels = []    # label — "2m 8m"
+line_labels = []   # label — line number/letter
+dest_labels = []   # label — destination text
+eta_labels = []    # label — ETAs
 
-BULLET_RADIUS = 6  # circle bullet radius
-BULLET_PAD_X = 7   # center X position from left edge
 FONT = terminalio.FONT
-CHAR_W = 6         # terminalio.FONT character width
-CHAR_H = 8         # terminalio.FONT character height
 
 for row in range(ROWS):
     y_top = ROW_Y[row]
-    y_center = y_top + ROW_HEIGHT // 2  # vertical center of row
+    y_center = y_top + ROW_HEIGHT // 2
 
-    # Bullet background circle
-    bullet = Circle(
-        BULLET_PAD_X,
-        y_center,
-        BULLET_RADIUS,
-        fill=DEFAULT_LINE_COLOR,
-    )
-    root_group.append(bullet)
-    bullets.append(bullet)
-
-    # Line letter label — centered inside circle
+    # Line number/letter label (for transit widgets)
     line_lbl = label.Label(
         FONT,
-        text=" ",
+        text="",
         color=0xFFFFFF,
-        anchor_point=(0.5, 0.5),
-        anchored_position=(
-            BULLET_PAD_X + 1,
-            y_center,
-        ),
+        x=2,
+        y=y_center,
+        anchor_point=(0.0, 0.5),
+        anchored_position=(2, y_center),
     )
     root_group.append(line_lbl)
     line_labels.append(line_lbl)
 
-    # Destination label — starts after bullet + 2px gap
-    dest_x = BULLET_PAD_X + BULLET_RADIUS + 2
+    # Destination/text label
     dest_lbl = label.Label(
         FONT,
         text="",
         color=0xFFFFFF,
-        x=dest_x,
-        y=y_top + ROW_HEIGHT // 2,
+        x=20,
+        y=y_center,
         anchor_point=(0.0, 0.5),
-        anchored_position=(dest_x, y_top + ROW_HEIGHT // 2),
+        anchored_position=(20, y_center),
     )
     root_group.append(dest_lbl)
     dest_labels.append(dest_lbl)
 
-    # ETA label — right-aligned, leave 2px margin from right edge
+    # ETA label — right-aligned
     eta_lbl = label.Label(
         FONT,
         text="",
         color=0xFFFF00,
         x=WIDTH - 2,
-        y=y_top + ROW_HEIGHT // 2,
+        y=y_center,
         anchor_point=(1.0, 0.5),
-        anchored_position=(WIDTH - 2, y_top + ROW_HEIGHT // 2),
+        anchored_position=(WIDTH - 2, y_center),
     )
     root_group.append(eta_lbl)
     eta_labels.append(eta_lbl)
@@ -180,122 +161,112 @@ display.root_group = root_group
 def set_status(msg):
     """Show a single status message on row 0, blank row 1."""
     print("Status:", msg)
-    bullets[0].fill = DEFAULT_LINE_COLOR
-    line_labels[0].text = "!"
+    line_labels[0].text = ""
     dest_labels[0].text = msg[:18]
+    dest_labels[0].color = 0xFFFFFF
+    dest_labels[0].x = 2
+    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
     clear_row(1)
 
 
 def clear_row(row):
-    bullets[row].fill = DEFAULT_LINE_COLOR
-    line_labels[row].text = " "
+    """Clear all text in a row."""
+    line_labels[row].text = ""
     dest_labels[row].text = ""
     eta_labels[row].text = ""
-
-
-def render_page(page_entries):
-    """Render up to 2 entries from the current page."""
-    for row in range(ROWS):
-        if row < len(page_entries):
-            entry = page_entries[row]
-            line = str(entry.get("line", "?")).upper()
-            dest = entry.get("finalStopName", "")
-            etas = entry.get("etas", [])
-
-            bullets[row].fill = LINE_COLORS.get(line, DEFAULT_LINE_COLOR)
-
-            # For 2-char line names (e.g. SIR) reduce slightly; keep 1-char centered
-            line_labels[row].text = line[:2] if len(line) <= 2 else line[:2]
-
-            # Truncate destination to fit available space
-            # Available: WIDTH - bullet_end - ETA_WIDTH - gaps
-            # ETA "99m" * 2 = ~12 chars max. Reserve ~36px for ETAs.
-            dest_max_chars = 9
-            dest_labels[row].text = dest[:dest_max_chars]
-
-            # Format up to 2 ETAs
-            eta_parts = [str(e) + "m" for e in etas[:2]]
-            eta_labels[row].text = " ".join(eta_parts)
-        else:
-            clear_row(row)
 
 
 # ---------------------------------------------------------------------------
 # Widget Rendering Functions
 # ---------------------------------------------------------------------------
+
 def render_transit_widget(widget_data):
-    """Render transit widget showing arrivals (similar to legacy format)."""
+    """
+    TRANSIT WIDGET - 2 Lines
+    Line 0: Line# LastStop    ETAm ETAm
+    Line 1: Line# LastStop    ETAm ETAm
+    """
     routes = widget_data.get("routes", [])
     if not routes:
         set_status("No trains")
         return
     
-    # Flatten all arrivals from all routes into entries
-    entries = []
-    for route in routes:
-        line = route.get("line", "?")
-        dest = route.get("finalStopName", "")
-        etas = route.get("etas", [])
-        entries.append({
-            "line": line,
-            "finalStopName": dest,
-            "etas": etas
-        })
-    
-    # Render first 2 entries (one page worth)
-    render_page(entries[:ROWS])
+    # Render up to 2 routes
+    for row in range(ROWS):
+        if row < len(routes):
+            route = routes[row]
+            line = str(route.get("line", "?")).upper()
+            destination = route.get("finalStopName", "")
+            etas = route.get("etas", [])
+            
+            # Line number/letter in color
+            line_labels[row].text = line[:2]
+            line_labels[row].color = LINE_COLORS.get(line, DEFAULT_LINE_COLOR)
+            
+            # Destination
+            dest_labels[row].text = destination[:12]
+            dest_labels[row].color = 0xFFFFFF
+            dest_labels[row].x = 20
+            dest_labels[row].anchored_position = (20, ROW_Y[row] + ROW_HEIGHT // 2)
+            
+            # 2 estimates
+            eta_labels[row].text = " ".join([str(e) + "m" for e in etas[:2]]) if etas else ""
+        else:
+            clear_row(row)
 
 
 def render_message_widget(widget_data):
-    """Render message widget showing custom text."""
+    """
+    MESSAGE WIDGET - Text with Color
+    Line 0: Custom text in specified color
+    """
     text = widget_data.get("text", "")
     color_hex = widget_data.get("color", "#FFFFFF")
-    # scroll = widget_data.get("scroll", False)  # TODO: implement scrolling
     
-    # Parse hex color to int
+    # Parse color
     try:
-        if color_hex.startswith("#"):
-            color_hex = color_hex[1:]
-        color = int(color_hex, 16)
+        color = int(color_hex.lstrip("#"), 16)
     except:
-        color = 0xFFFFFF  # white fallback
+        color = 0xFFFFFF
     
-    # Clear all rows first
-    for row in range(ROWS):
-        clear_row(row)
-    
-    # Display message on row 0, centered
-    bullets[0].fill = color
+    # Display text with color
     line_labels[0].text = ""
-    dest_labels[0].text = text[:18]  # Truncate to fit
+    dest_labels[0].text = text[:20]
     dest_labels[0].color = color
+    dest_labels[0].x = 2
+    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
+    
+    clear_row(1)
 
 
 def render_clock_widget(widget_data):
-    """Render clock widget showing time and date."""
+    """
+    CLOCK WIDGET - 2 Lines
+    Line 0: Time
+    Line 1: Date and Timezone
+    """
     time_str = widget_data.get("time", "")
     date_str = widget_data.get("date", "")
+    timezone = widget_data.get("timezone", "")
     
-    # Clear all rows
-    for row in range(ROWS):
-        clear_row(row)
-    
-    # Show time on row 0
-    bullets[0].fill = 0x00AAFF  # blue
+    # Line 0: Time
     line_labels[0].text = ""
-    dest_labels[0].text = time_str[:18]
+    dest_labels[0].text = time_str[:20]
     dest_labels[0].color = 0xFFFFFF
+    dest_labels[0].x = 2
+    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
     
-    # Show date on row 1 if provided
-    if date_str:
-        bullets[1].fill = 0x00AAFF
-        line_labels[1].text = ""
-        dest_labels[1].text = date_str[:18]
-        dest_labels[1].color = 0xFFFFFF
-        eta_labels[1].text = ""
+    # Line 1: Date + Timezone
+    line_labels[1].text = ""
+    date_display = (date_str + " " + timezone).strip() if timezone else date_str
+    dest_labels[1].text = date_display[:20]
+    dest_labels[1].color = 0xFFFFFF
+    dest_labels[1].x = 2
+    dest_labels[1].anchored_position = (2, ROW_Y[1] + ROW_HEIGHT // 2)
+    eta_labels[1].text = ""
 
 
 def render_widget(widget):
