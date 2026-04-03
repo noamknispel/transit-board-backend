@@ -73,6 +73,25 @@ class ApiClient {
     const response = await this.request<{ subscriptions: Subscription[] }>(`/devices/${deviceId}/subscriptions`);
     return response.subscriptions;
   }
+
+  async createSubscription(deviceId: string, data: { provider: string; line: string; direction: string; stopId: string }): Promise<{ success: boolean; subscriptionId: number }> {
+    return this.request<{ success: boolean; subscriptionId: number }>(`/devices/${deviceId}/subscribe`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSubscription(deviceId: string, subscriptionId: number): Promise<void> {
+    await this.request<void>(`/devices/${deviceId}/subscriptions/${subscriptionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Stop search endpoint
+  async searchStops(query: string): Promise<{ stopId: string; stopName: string; lat?: number; lon?: number }[]> {
+    const response = await this.request<{ stops: { stopId: string; stopName: string; lat?: number; lon?: number }[] }>(`/stops/search?q=${encodeURIComponent(query)}`);
+    return response.stops;
+  }
 }
 
 export const api = new ApiClient();

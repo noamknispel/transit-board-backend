@@ -118,3 +118,27 @@ export const getDeviceData = async (deviceId: string) => {
   const widgetsWithData = await getWidgetsData(deviceId);
   return jsonResponse({ widgets: widgetsWithData });
 };
+
+export const searchStops = async (req: Request) => {
+  const url = new URL(req.url);
+  const query = url.searchParams.get("q") || "";
+  
+  if (query.length < 2) {
+    return jsonResponse({ stops: [] });
+  }
+  
+  const stops = GTFSStopModel.searchByName(query);
+  
+  // Filter to only stations (not individual platforms) and limit results
+  const stations = stops
+    .filter(stop => stop.location_type === 1)
+    .slice(0, 50)
+    .map(stop => ({
+      stopId: stop.stop_id,
+      stopName: stop.stop_name,
+      lat: stop.stop_lat,
+      lon: stop.stop_lon,
+    }));
+  
+  return jsonResponse({ stops: stations });
+};

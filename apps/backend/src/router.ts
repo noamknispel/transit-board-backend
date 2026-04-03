@@ -11,6 +11,11 @@ export const router = async (req: Request): Promise<Response> => {
     return deviceController.createDevice(req);
   }
 
+  // GET /stops/search - Search for GTFS stops
+  if (pathname === "/stops/search" && method === "GET") {
+    return deviceController.searchStops(req);
+  }
+
   // POST /devices/:deviceId/subscribe - Subscribe a device to a stop
   const subscribeMatch = pathname.match(/^\/devices\/([^\/]+)\/subscribe$/);
   if (subscribeMatch && method === "POST") {
