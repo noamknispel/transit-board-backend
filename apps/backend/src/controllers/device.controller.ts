@@ -33,12 +33,29 @@ export const createSubscription = async (req: Request, deviceId: string) => {
       direction: string;
       stopId: string;
     };
+
+    // Directional stop IDs are authoritative. If the stop ends with N/S,
+    // force the direction to match to avoid zero-arrival mismatches.
+    const stopId = (body.stopId || "").trim();
+    const rawDirection = (body.direction || "").trim().toLowerCase();
+    let normalizedDirection = rawDirection;
+
+    if (stopId.endsWith("N")) {
+      normalizedDirection = "uptown";
+    } else if (stopId.endsWith("S")) {
+      normalizedDirection = "downtown";
+    } else if (rawDirection === "n" || rawDirection === "north") {
+      normalizedDirection = "uptown";
+    } else if (rawDirection === "s" || rawDirection === "south") {
+      normalizedDirection = "downtown";
+    }
+
     const subscription = SubscriptionModel.create(
       deviceId,
       body.provider,
       body.line,
-      body.direction,
-      body.stopId,
+      normalizedDirection,
+      stopId,
     );
     return jsonResponse(
       {
@@ -99,7 +116,12 @@ export const listSubscriptions = async (deviceId: string) => {
       deviceId: sub.deviceId,
       stopId: sub.stopId,
       routeId: sub.line, // Map 'line' to 'routeId' for frontend
-      direction: sub.direction === 'uptown' || sub.direction === 'north' ? 0 : 1,
+      direction:
+        sub.direction === 'uptown' ||
+        sub.direction === 'north' ||
+        sub.direction === 'n'
+          ? 0
+          : 1,
       stopName: stopName,
       createdAt: sub.createdAt,
     };
