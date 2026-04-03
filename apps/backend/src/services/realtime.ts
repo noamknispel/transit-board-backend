@@ -106,6 +106,27 @@ export class RealtimeService {
     return 0;
   }
 
+  private normalizeStopId(stopId: string): string {
+    const id = (stopId || "").toUpperCase();
+    if (id.endsWith("N") || id.endsWith("S")) {
+      return id.slice(0, -1);
+    }
+    return id;
+  }
+
+  private stopMatches(requestedStopId: string, feedStopId: string): boolean {
+    const requested = (requestedStopId || "").toUpperCase();
+    const feed = (feedStopId || "").toUpperCase();
+
+    if (requested === feed) return true;
+
+    // Treat station IDs and platform IDs as compatible:
+    // 211 <-> 211N/211S
+    const requestedBase = this.normalizeStopId(requested);
+    const feedBase = this.normalizeStopId(feed);
+    return requestedBase.length > 0 && requestedBase === feedBase;
+  }
+
   private matchesDirection(
     tripId: string,
     requestedDirection: string,
@@ -185,7 +206,9 @@ export class RealtimeService {
         if (!tripUpdate.stop_time_update) continue;
 
         for (const stopTimeUpdate of tripUpdate.stop_time_update) {
-          if (stopTimeUpdate.stop_id !== stopId) continue;
+          if (!this.stopMatches(stopId, stopTimeUpdate.stop_id || "")) {
+            continue;
+          }
 
           const arrivalTime = stopTimeUpdate.arrival?.time;
           if (!arrivalTime) continue;
