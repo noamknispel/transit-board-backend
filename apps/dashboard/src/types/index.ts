@@ -2,9 +2,10 @@
 export interface Device {
   id: string;
   name: string;
-  macAddress: string;
+  macAddress?: string;
   createdAt: string;
-  lastSeen: string | null;
+  updatedAt?: string;
+  lastSeen?: string | null;
 }
 
 // Widget types

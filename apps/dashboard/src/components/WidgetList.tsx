@@ -34,13 +34,14 @@ function SortableWidget({ widget, onEdit, onDelete, onToggleEnabled }: {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes}>
       <WidgetCard
         widget={widget}
         onEdit={onEdit}
         onDelete={onDelete}
         onToggleEnabled={onToggleEnabled}
         isDragging={isDragging}
+        dragHandleProps={listeners}
       />
     </div>
   );

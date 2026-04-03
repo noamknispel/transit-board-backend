@@ -6,9 +6,10 @@ interface WidgetCardProps {
   onDelete: (widgetId: number) => void;
   onToggleEnabled: (widgetId: number, enabled: boolean) => void;
   isDragging?: boolean;
+  dragHandleProps?: any;
 }
 
-export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDragging }: WidgetCardProps) {
+export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDragging, dragHandleProps }: WidgetCardProps) {
   const getWidgetIcon = (type: string) => {
     switch (type) {
       case 'transit':
@@ -42,6 +43,22 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
       } ${!widget.enabled ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start justify-between">
+        {/* Drag handle */}
+        <div 
+          {...dragHandleProps}
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 mr-2 pt-1"
+          title="Drag to reorder"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <circle cx="7" cy="5" r="1.5" />
+            <circle cx="13" cy="5" r="1.5" />
+            <circle cx="7" cy="10" r="1.5" />
+            <circle cx="13" cy="10" r="1.5" />
+            <circle cx="7" cy="15" r="1.5" />
+            <circle cx="13" cy="15" r="1.5" />
+          </svg>
+        </div>
+
         <div className="flex items-start flex-1">
           <div className="text-3xl mr-3">{getWidgetIcon(widget.type)}</div>
           <div className="flex-1">

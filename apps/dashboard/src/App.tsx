@@ -4,13 +4,15 @@ import { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription 
 import { DeviceSelector } from './components/DeviceSelector';
 import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
+import { AddDeviceModal } from './components/AddDeviceModal';
 
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,14 +74,33 @@ function App() {
     setSelectedDeviceId(deviceId);
   };
 
+  const handleAddDevice = () => {
+    setIsDeviceModalOpen(true);
+  };
+
+  const handleSaveDevice = async (name: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await api.createDevice(name);
+      await loadDevices();
+      // Auto-select the newly created device
+      setSelectedDeviceId(result.deviceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create device');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddWidget = () => {
     setEditingWidget(null);
-    setIsModalOpen(true);
+    setIsWidgetModalOpen(true);
   };
 
   const handleEditWidget = (widget: Widget) => {
     setEditingWidget(widget);
-    setIsModalOpen(true);
+    setIsWidgetModalOpen(true);
   };
 
   const handleSaveWidget = async (data: CreateWidgetRequest | UpdateWidgetRequest) => {
@@ -98,7 +119,7 @@ function App() {
       }
 
       await loadWidgets();
-      setIsModalOpen(false);
+      setIsWidgetModalOpen(false);
       setEditingWidget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save widget');
@@ -170,6 +191,7 @@ function App() {
           devices={devices}
           selectedDeviceId={selectedDeviceId}
           onSelectDevice={handleSelectDevice}
+          onAddDevice={handleAddDevice}
         />
 
         {selectedDeviceId && (
@@ -191,10 +213,16 @@ function App() {
           </>
         )}
 
+        <AddDeviceModal
+          isOpen={isDeviceModalOpen}
+          onClose={() => setIsDeviceModalOpen(false)}
+          onSave={handleSaveDevice}
+        />
+
         <AddWidgetModal
-          isOpen={isModalOpen}
+          isOpen={isWidgetModalOpen}
           onClose={() => {
-            setIsModalOpen(false);
+            setIsWidgetModalOpen(false);
             setEditingWidget(null);
           }}
           onSave={handleSaveWidget}

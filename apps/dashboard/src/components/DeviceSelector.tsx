@@ -4,12 +4,21 @@ interface DeviceSelectorProps {
   devices: Device[];
   selectedDeviceId: string | null;
   onSelectDevice: (deviceId: string) => void;
+  onAddDevice: () => void;
 }
 
-export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice }: DeviceSelectorProps) {
+export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice, onAddDevice }: DeviceSelectorProps) {
   return (
     <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Select Device</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">Select Device</h2>
+        <button
+          onClick={onAddDevice}
+          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          + Add Device
+        </button>
+      </div>
       <select
         value={selectedDeviceId || ''}
         onChange={(e) => onSelectDevice(e.target.value)}
@@ -18,7 +27,7 @@ export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice }: De
         <option value="">-- Select a device --</option>
         {devices.map((device) => (
           <option key={device.id} value={device.id}>
-            {device.name} ({device.macAddress})
+            {device.name} ({device.macAddress || device.id.slice(0, 8)})
           </option>
         ))}
       </select>

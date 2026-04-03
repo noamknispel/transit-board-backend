@@ -222,6 +222,101 @@ def render_page(page_entries):
 
 
 # ---------------------------------------------------------------------------
+# Widget Rendering Functions
+# ---------------------------------------------------------------------------
+def render_transit_widget(widget_data):
+    """Render transit widget showing arrivals (similar to legacy format)."""
+    routes = widget_data.get("routes", [])
+    if not routes:
+        set_status("No trains")
+        return
+    
+    # Flatten all arrivals from all routes into entries
+    entries = []
+    for route in routes:
+        line = route.get("line", "?")
+        dest = route.get("finalStopName", "")
+        etas = route.get("etas", [])
+        entries.append({
+            "line": line,
+            "finalStopName": dest,
+            "etas": etas
+        })
+    
+    # Render first 2 entries (one page worth)
+    render_page(entries[:ROWS])
+
+
+def render_message_widget(widget_data):
+    """Render message widget showing custom text."""
+    text = widget_data.get("text", "")
+    color_hex = widget_data.get("color", "#FFFFFF")
+    # scroll = widget_data.get("scroll", False)  # TODO: implement scrolling
+    
+    # Parse hex color to int
+    try:
+        if color_hex.startswith("#"):
+            color_hex = color_hex[1:]
+        color = int(color_hex, 16)
+    except:
+        color = 0xFFFFFF  # white fallback
+    
+    # Clear all rows first
+    for row in range(ROWS):
+        clear_row(row)
+    
+    # Display message on row 0, centered
+    bullets[0].fill = color
+    line_labels[0].text = ""
+    dest_labels[0].text = text[:18]  # Truncate to fit
+    dest_labels[0].color = color
+    eta_labels[0].text = ""
+
+
+def render_clock_widget(widget_data):
+    """Render clock widget showing time and date."""
+    time_str = widget_data.get("time", "")
+    date_str = widget_data.get("date", "")
+    
+    # Clear all rows
+    for row in range(ROWS):
+        clear_row(row)
+    
+    # Show time on row 0
+    bullets[0].fill = 0x00AAFF  # blue
+    line_labels[0].text = ""
+    dest_labels[0].text = time_str[:18]
+    dest_labels[0].color = 0xFFFFFF
+    eta_labels[0].text = ""
+    
+    # Show date on row 1 if provided
+    if date_str:
+        bullets[1].fill = 0x00AAFF
+        line_labels[1].text = ""
+        dest_labels[1].text = date_str[:18]
+        dest_labels[1].color = 0xFFFFFF
+        eta_labels[1].text = ""
+
+
+def render_widget(widget):
+    """Route to appropriate widget renderer based on type."""
+    widget_type = widget.get("type", "")
+    widget_data = widget.get("data", {})
+    
+    print("Rendering widget:", widget_type)
+    
+    if widget_type == "transit":
+        render_transit_widget(widget_data)
+    elif widget_type == "message":
+        render_message_widget(widget_data)
+    elif widget_type == "clock":
+        render_clock_widget(widget_data)
+    else:
+        print("Unknown widget type:", widget_type)
+        set_status("Unknown type")
+
+
+# ---------------------------------------------------------------------------
 # WiFi + HTTP (ESP32 SPI Setup for MatrixPortal M4)
 # ---------------------------------------------------------------------------
 print("Setting up ESP32 WiFi...")
@@ -252,7 +347,7 @@ except Exception as e:
 
 
 def fetch_data():
-    """Fetch transit data from backend. Returns list of entries or None on error."""
+    """Fetch widget data from backend. Returns list of widgets or None on error."""
     url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
     print("Fetching:", url)
     try:
@@ -260,9 +355,10 @@ def fetch_data():
         print("Response status:", response.status_code)
         if response.status_code == 200:
             payload = response.json()
-            print("Data entries:", len(payload.get("data", [])))
+            widgets = payload.get("widgets", [])
+            print("Received {} widgets".format(len(widgets)))
             response.close()
-            return payload.get("data", [])
+            return widgets
         else:
             print("HTTP error:", response.status_code)
             response.close()
@@ -280,12 +376,13 @@ def fetch_data():
 set_status("Loading...")
 print("Starting main loop")
 
-entries = []         # full list of transit entries from last poll
-pages = []           # list of 2-entry slices
-current_page = 0
+# State variables
+widgets = []           # widget list
+current_widget = 0     # current widget index
+current_duration = 10  # default duration
 
 last_poll = -POLL_INTERVAL   # force immediate poll on first iteration
-last_page_flip = time.monotonic()
+last_rotation = time.monotonic()
 
 while True:
     now = time.monotonic()
@@ -296,29 +393,27 @@ while True:
         result = fetch_data()
 
         if result is not None:
-            entries = result
+            widgets = result
             
-            # Check if we have any entries
-            if len(entries) == 0:
-                set_status("No trains")
-                pages = []
+            if len(widgets) == 0:
+                set_status("No widgets")
             else:
-                # Build pages: chunks of 2 entries
-                pages = [entries[i:i + ROWS] for i in range(0, len(entries), ROWS)]
-                current_page = 0
-                render_page(pages[current_page])
+                current_widget = 0
+                render_widget(widgets[current_widget])
+                current_duration = widgets[current_widget].get("duration", 10)
         else:
             set_status("No data")
-            pages = []
+            widgets = []
 
         last_poll = time.monotonic()
-        last_page_flip = time.monotonic()
+        last_rotation = time.monotonic()
 
-    # --- Page flip (only when there are multiple pages) ---
-    elif pages and len(pages) > 1:
-        if (now - last_page_flip) >= PAGE_DURATION:
-            current_page = (current_page + 1) % len(pages)
-            render_page(pages[current_page])
-            last_page_flip = time.monotonic()
+    # --- Widget rotation ---
+    elif widgets and len(widgets) > 1:
+        if (now - last_rotation) >= current_duration:
+            current_widget = (current_widget + 1) % len(widgets)
+            render_widget(widgets[current_widget])
+            current_duration = widgets[current_widget].get("duration", 10)
+            last_rotation = time.monotonic()
 
     time.sleep(0.1)

@@ -23,12 +23,21 @@ class ApiClient {
 
   // Device endpoints
   async getDevices(): Promise<Device[]> {
-    return this.request<Device[]>('/devices');
+    const response = await this.request<{ devices: Device[] }>('/devices');
+    return response.devices;
+  }
+
+  async createDevice(name: string): Promise<{ deviceId: string }> {
+    return this.request<{ deviceId: string }>('/devices', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
   }
 
   // Widget endpoints
   async getWidgets(deviceId: string): Promise<Widget[]> {
-    return this.request<Widget[]>(`/devices/${deviceId}/widgets`);
+    const response = await this.request<{ widgets: Widget[] }>(`/devices/${deviceId}/widgets`);
+    return response.widgets;
   }
 
   async createWidget(deviceId: string, data: CreateWidgetRequest): Promise<Widget> {
@@ -60,7 +69,8 @@ class ApiClient {
 
   // Subscription endpoints
   async getSubscriptions(deviceId: string): Promise<Subscription[]> {
-    return this.request<Subscription[]>(`/devices/${deviceId}/subscriptions`);
+    const response = await this.request<{ subscriptions: Subscription[] }>(`/devices/${deviceId}/subscriptions`);
+    return response.subscriptions;
   }
 }
 
