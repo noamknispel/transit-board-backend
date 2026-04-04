@@ -2,6 +2,41 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetType } from '../types';
 
+const FALLBACK_TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Kolkata',
+  'Australia/Sydney',
+  'UTC',
+];
+
+function getTimezoneOptions(): string[] {
+  const supportedValuesOf = (Intl as any)?.supportedValuesOf as ((key: string) => string[]) | undefined;
+
+  if (typeof supportedValuesOf === 'function') {
+    try {
+      const zones = supportedValuesOf('timeZone');
+      if (zones.length > 0) {
+        return zones;
+      }
+    } catch {
+      // Fall back to static list if runtime support is incomplete.
+    }
+  }
+
+  return FALLBACK_TIMEZONES;
+}
+
 interface AddWidgetModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,6 +56,8 @@ export function AddWidgetModal({
   deviceId,
   onSubscriptionsChanged,
 }: AddWidgetModalProps) {
+  const timezoneListId = 'timezone-options';
+
   const [widgetType, setWidgetType] = useState<WidgetType>('message');
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled] = useState(true);
@@ -49,6 +86,8 @@ export function AddWidgetModal({
     }
     return ['Type', 'Configure', 'Display', 'Review'];
   }, [editWidget]);
+
+  const timezoneOptions = useMemo(() => getTimezoneOptions(), []);
 
   const isLastStep = stepIndex === steps.length - 1;
 
@@ -349,8 +388,16 @@ export function AddWidgetModal({
                     value={clockTimezone}
                     onChange={(e) => setClockTimezone(e.target.value)}
                     className="tb-input"
-                    placeholder="America/New_York"
+                    list={timezoneListId}
+                    placeholder="Search or select timezone"
                   />
+                  <datalist id={timezoneListId}>
+                    {timezoneOptions.map((timezone) => (
+                      <option key={timezone} value={timezone}>
+                        {timezone}
+                      </option>
+                    ))}
+                  </datalist>
                 </>
               )}
 
