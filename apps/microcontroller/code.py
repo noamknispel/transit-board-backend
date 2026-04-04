@@ -64,6 +64,7 @@ WIDTH = 128
 HEIGHT = 32
 ROWS = 2           # rows visible at once
 ROW_HEIGHT = 16    # pixels per row
+BADGE_TEXT_X_OFFSET = 1
 
 # Row Y anchors (top-left corner of each row)
 ROW_Y = [0, 16]
@@ -113,6 +114,7 @@ root_group = displayio.Group()
 line_labels = []   # label — line number/letter
 dest_labels = []   # label — destination text
 eta_labels = []    # label — ETAs
+origin_labels = [] # label — compact origin indicator
 line_circles = []  # circle badges for transit lines
 
 FONT = terminalio.FONT
@@ -138,10 +140,10 @@ for row in range(ROWS):
         FONT,
         text="",
         color=0x000000,
-        x=8,
+        x=8 + BADGE_TEXT_X_OFFSET,
         y=y_center,
         anchor_point=(0.5, 0.5),
-        anchored_position=(8, y_center),
+        anchored_position=(8 + BADGE_TEXT_X_OFFSET, y_center),
     )
     root_group.append(line_lbl)
     line_labels.append(line_lbl)
@@ -172,6 +174,19 @@ for row in range(ROWS):
     root_group.append(eta_lbl)
     eta_labels.append(eta_lbl)
 
+    # Origin label — right-aligned, drawn before ETA block
+    origin_lbl = label.Label(
+        FONT,
+        text="",
+        color=0x8A8A8A,
+        x=WIDTH - 40,
+        y=y_center,
+        anchor_point=(1.0, 0.5),
+        anchored_position=(WIDTH - 40, y_center),
+    )
+    root_group.append(origin_lbl)
+    origin_labels.append(origin_lbl)
+
 display.root_group = root_group
 
 # ---------------------------------------------------------------------------
@@ -196,6 +211,7 @@ def clear_row(row):
     line_labels[row].text = ""
     dest_labels[row].text = ""
     eta_labels[row].text = ""
+    origin_labels[row].text = ""
 
 
 def hide_line_badge(row):
@@ -230,18 +246,18 @@ def format_line_for_badge(line):
 
 
 def get_origin_tag(route):
-    """Return compact source stop indicator tag, e.g. ' [TSQ]'."""
+    """Return ultra-compact source stop indicator tag, e.g. '-TS'."""
     source_abbrev = str(route.get("sourceStopAbbrev", "")).strip().upper()
     if not source_abbrev:
         stop_id = str(route.get("stopId", "")).strip().upper()
         if stop_id.endswith("N") or stop_id.endswith("S"):
             stop_id = stop_id[:-1]
-        source_abbrev = stop_id[-3:] if stop_id else ""
+        source_abbrev = stop_id[-2:] if stop_id else ""
 
     if not source_abbrev:
         return ""
 
-    return " [" + source_abbrev[:3] + "]"
+    return "-" + source_abbrev[:2]
 
 
 # ---------------------------------------------------------------------------
@@ -285,24 +301,29 @@ def render_transit_widget(widget_data, page=0):
             eta_text = " ".join([str(e) + "m" for e in etas[:2]]) if etas else ""
             origin_tag = get_origin_tag(route)
 
-            # Prevent destination text from colliding with right-aligned ETA block.
-            # 17 chars roughly fit from x=20 to right edge on this matrix/font.
-            max_row_chars = max(6, 17 - len(eta_text) - 1)
+            # Place ETA at right edge, then place origin tag just to its left.
+            eta_labels[row].text = eta_text
+            eta_chars = len(eta_text)
+            eta_left_x = (WIDTH - 2) - (eta_chars * 6)
 
-            # Keep origin tag compact enough to always leave room for destination text.
-            if origin_tag and len(origin_tag) >= (max_row_chars - 1):
-                origin_tag = " [" + origin_tag[-4:-1] + "]"
+            if origin_tag:
+                origin_labels[row].text = origin_tag
+                origin_labels[row].anchored_position = (eta_left_x - 2, ROW_Y[row] + ROW_HEIGHT // 2)
+            else:
+                origin_labels[row].text = ""
 
-            max_dest_chars = max(1, min(12, max_row_chars - len(origin_tag)))
+            origin_width_px = len(origin_labels[row].text) * 6
+            origin_left_x = (eta_left_x - 2) - origin_width_px if origin_labels[row].text else eta_left_x
+
+            # Keep destination from colliding with origin/ETA columns.
+            available_px = max(6, origin_left_x - 20 - 2)
+            max_dest_chars = max(1, min(12, available_px // 6))
             
             # Destination
-            dest_labels[row].text = destination[:max_dest_chars] + origin_tag
+            dest_labels[row].text = destination[:max_dest_chars]
             dest_labels[row].color = 0xFFFFFF
             dest_labels[row].x = 20
             dest_labels[row].anchored_position = (20, ROW_Y[row] + ROW_HEIGHT // 2)
-            
-            # 2 estimates
-            eta_labels[row].text = eta_text
         else:
             clear_row(row)
 
