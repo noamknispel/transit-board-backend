@@ -174,15 +174,36 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Transit Board Dashboard</h1>
-          <p className="text-gray-600">Manage widgets for your transit display boards</p>
+    <div className="tb-shell">
+      <div className="tb-container">
+        <header className="tb-panel mb-6 p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent-cyan">Transit Ops Console</p>
+              <h1 className="mt-2 font-display text-3xl font-semibold text-ops-100 md:text-5xl">Board Control Center</h1>
+              <p className="mt-2 max-w-2xl text-sm text-ops-300 md:text-base">
+                Configure widgets, subscriptions, and display behavior for every transit board.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center md:w-[360px]">
+              <div className="tb-panel-soft p-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ops-400">Devices</p>
+                <p className="mt-1 font-display text-2xl text-accent-cyan">{devices.length}</p>
+              </div>
+              <div className="tb-panel-soft p-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ops-400">Widgets</p>
+                <p className="mt-1 font-display text-2xl text-accent-amber">{widgets.length}</p>
+              </div>
+              <div className="tb-panel-soft p-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ops-400">Subs</p>
+                <p className="mt-1 font-display text-2xl text-accent-mint">{subscriptions.length}</p>
+              </div>
+            </div>
+          </div>
         </header>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="mb-6 rounded-lg border border-red-400/60 bg-red-500/15 px-4 py-3 text-sm text-red-100">
             {error}
           </div>
         )}
@@ -197,8 +218,9 @@ function App() {
         {selectedDeviceId && (
           <>
             {loading && !widgets.length ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500">Loading...</p>
+              <div className="tb-panel p-10 text-center">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-ops-400">Loading Widgets</p>
+                <p className="mt-2 text-ops-300">Fetching board configuration...</p>
               </div>
             ) : (
               <WidgetList

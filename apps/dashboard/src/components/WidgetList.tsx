@@ -68,21 +68,24 @@ export function WidgetList({ widgets, onReorder, onEdit, onDelete, onToggleEnabl
   };
 
   return (
-    <div className="bg-white shadow-md rounded-lg p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Widgets</h2>
+    <div className="tb-panel p-5 md:p-6">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-display text-xl text-ops-100">Widget Stack</h2>
+          <p className="text-sm text-ops-300">Drag to reorder playback priority and timing.</p>
+        </div>
         <button
           onClick={onAddWidget}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="tb-btn-primary"
         >
           + Add Widget
         </button>
       </div>
 
       {widgets.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-lg mb-2">No widgets configured</p>
-          <p className="text-sm">Click "Add Widget" to get started</p>
+        <div className="tb-panel-soft py-12 text-center">
+          <p className="font-display text-2xl text-ops-100">No widgets configured</p>
+          <p className="mt-2 text-sm text-ops-300">Add your first widget to start rendering board content.</p>
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

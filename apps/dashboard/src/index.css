@@ -1,17 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Manrope', 'Avenir Next', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: #e2f0fb;
+  background:
+    radial-gradient(1300px 780px at 90% -10%, rgba(39, 211, 208, 0.22), transparent 52%),
+    radial-gradient(950px 600px at -5% 8%, rgba(248, 184, 79, 0.16), transparent 58%),
+    linear-gradient(165deg, #071422 0%, #0b1f33 48%, #112c46 100%);
 }
 
 #root {
   min-height: 100vh;
-  background-color: #f3f4f6;
+}
+
+@layer components {
+  .tb-shell {
+    @apply min-h-screen px-4 py-6 md:px-6 md:py-10;
+  }
+
+  .tb-container {
+    @apply mx-auto max-w-6xl;
+  }
+
+  .tb-panel {
+    @apply rounded-xl2 border border-ops-700/75 bg-ops-900/90 shadow-panel backdrop-blur;
+  }
+
+  .tb-panel-soft {
+    @apply rounded-xl2 border border-ops-700/65 bg-ops-900/60;
+  }
+
+  .tb-btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent-cyan px-4 py-2 text-sm font-semibold text-ops-950 transition hover:brightness-110;
+  }
+
+  .tb-btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-ops-500/70 bg-ops-800/75 px-4 py-2 text-sm font-semibold text-ops-100 transition hover:border-accent-cyan/65 hover:text-accent-cyan;
+  }
+
+  .tb-btn-danger {
+    @apply inline-flex items-center justify-center rounded-lg border border-rose-400/60 bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-red-500/25;
+  }
+
+  .tb-input {
+    @apply w-full rounded-lg border border-ops-600 bg-ops-950/70 px-3 py-2 text-sm text-ops-100 placeholder:text-ops-300/75 focus:border-accent-cyan focus:outline-none focus:ring-2 focus:ring-accent-cyan/30;
+  }
+
+  .tb-label {
+    @apply mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-ops-300;
+  }
 }

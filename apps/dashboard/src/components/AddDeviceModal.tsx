@@ -21,22 +21,24 @@ export function AddDeviceModal({ isOpen, onClose, onSave }: AddDeviceModalProps)
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full">
-        <h2 className="text-2xl font-bold mb-4">Add New Device</h2>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-6">
+      <div className="tb-panel w-full rounded-b-none p-5 sm:max-w-md sm:rounded-xl2 sm:p-6">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-accent-cyan">Device Setup</p>
+        <h2 className="mt-1 font-display text-2xl text-ops-100">Add New Device</h2>
+        <p className="mt-1 text-sm text-ops-300">Register a board endpoint for widget playback.</p>
         
         <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Device Name</label>
+          <div className="mb-5 mt-5">
+            <label className="tb-label">Device Name</label>
             <input
               type="text"
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="tb-input"
               placeholder="e.g., transit-board-1"
               required
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="mt-2 text-xs text-ops-300">
               This name will be displayed in the device selector
             </p>
           </div>
@@ -45,13 +47,13 @@ export function AddDeviceModal({ isOpen, onClose, onSave }: AddDeviceModalProps)
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              className="tb-btn-secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="tb-btn-primary"
             >
               Add Device
             </button>

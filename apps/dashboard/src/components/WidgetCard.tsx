@@ -13,13 +13,13 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
   const getWidgetIcon = (type: string) => {
     switch (type) {
       case 'transit':
-        return '🚇';
+        return 'TR';
       case 'message':
-        return '💬';
+        return 'MSG';
       case 'clock':
-        return '🕐';
+        return 'CLK';
       default:
-        return '📱';
+        return 'WGT';
     }
   };
 
@@ -38,15 +38,14 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-md p-4 mb-3 border-2 ${
-        isDragging ? 'border-blue-500 opacity-50' : 'border-transparent'
-      } ${!widget.enabled ? 'opacity-60' : ''}`}
+      className={`mb-3 rounded-xl border p-4 transition ${
+        isDragging ? 'border-accent-cyan shadow-glow bg-ops-900/85' : 'border-ops-700/70 bg-ops-900/60'
+      } ${!widget.enabled ? 'opacity-65' : ''}`}
     >
-      <div className="flex items-start justify-between">
-        {/* Drag handle */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div 
           {...dragHandleProps}
-          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 mr-2 pt-1"
+          className="cursor-grab self-start rounded-md border border-ops-600 p-1.5 text-ops-300 transition hover:text-accent-cyan active:cursor-grabbing"
           title="Drag to reorder"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -59,37 +58,39 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
           </svg>
         </div>
 
-        <div className="flex items-start flex-1">
-          <div className="text-3xl mr-3">{getWidgetIcon(widget.type)}</div>
+        <div className="flex flex-1 items-start gap-3">
+          <div className="rounded-lg border border-ops-600 bg-ops-950/70 px-2.5 py-1 font-mono text-xs font-semibold text-accent-cyan">
+            {getWidgetIcon(widget.type)}
+          </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-lg capitalize">{widget.type} Widget</h3>
-            <p className="text-gray-600 text-sm mb-2">{getWidgetSummary(widget)}</p>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>Duration: {widget.duration}s</span>
-              <span>Order: {widget.displayOrder + 1}</span>
+            <h3 className="font-display text-lg capitalize text-ops-100">{widget.type} Widget</h3>
+            <p className="mb-2 text-sm text-ops-300">{getWidgetSummary(widget)}</p>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-ops-300">
+              <span className="rounded bg-ops-900 px-2 py-1">Duration: {widget.duration}s</span>
+              <span className="rounded bg-ops-900 px-2 py-1">Order: {widget.displayOrder + 1}</span>
             </div>
           </div>
         </div>
-        <div className="flex flex-col gap-2 ml-4">
+        <div className="flex flex-row flex-wrap gap-2 sm:ml-4 sm:flex-col">
           <button
             onClick={() => onToggleEnabled(widget.id, !widget.enabled)}
-            className={`px-3 py-1 text-xs rounded ${
+            className={`rounded px-3 py-1.5 text-xs font-semibold ${
               widget.enabled
-                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-accent-mint/20 text-accent-mint hover:bg-accent-mint/30'
+                : 'bg-ops-800 text-ops-200 hover:bg-ops-700'
             }`}
           >
             {widget.enabled ? 'Enabled' : 'Disabled'}
           </button>
           <button
             onClick={() => onEdit(widget)}
-            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            className="rounded bg-accent-cyan/15 px-3 py-1.5 text-xs font-semibold text-accent-cyan hover:bg-accent-cyan/25"
           >
             Edit
           </button>
           <button
             onClick={() => onDelete(widget.id)}
-            className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+            className="tb-btn-danger"
           >
             Delete
           </button>

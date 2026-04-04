@@ -9,20 +9,24 @@ interface DeviceSelectorProps {
 
 export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice, onAddDevice }: DeviceSelectorProps) {
   return (
-    <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Select Device</h2>
+    <div className="tb-panel mb-6 p-5 md:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-display text-xl text-white">Device Target</h2>
+          <p className="text-sm text-ops-200">Choose which board receives widget updates.</p>
+        </div>
         <button
           onClick={onAddDevice}
-          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="tb-btn-primary"
         >
           + Add Device
         </button>
       </div>
+      <label className="tb-label">Board Device</label>
       <select
         value={selectedDeviceId || ''}
         onChange={(e) => onSelectDevice(e.target.value)}
-        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="tb-input"
       >
         <option value="">-- Select a device --</option>
         {devices.map((device) => (

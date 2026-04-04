@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Widget, WidgetType, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
+import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetType } from '../types';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -12,25 +12,28 @@ interface AddWidgetModalProps {
   onSubscriptionsChanged?: () => Promise<void> | void;
 }
 
-export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscriptions = [], deviceId, onSubscriptionsChanged }: AddWidgetModalProps) {
+export function AddWidgetModal({
+  isOpen,
+  onClose,
+  onSave,
+  editWidget,
+  subscriptions = [],
+  deviceId,
+  onSubscriptionsChanged,
+}: AddWidgetModalProps) {
   const [widgetType, setWidgetType] = useState<WidgetType>('message');
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled] = useState(true);
 
-  // Message widget state
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
   const [messageScroll, setMessageScroll] = useState(true);
 
-  // Clock widget state
   const [clockFormat, setClockFormat] = useState<'12h' | '24h'>('12h');
   const [clockShowDate, setClockShowDate] = useState(true);
   const [clockTimezone, setClockTimezone] = useState('America/New_York');
 
-  // Transit widget state
   const [transitSubscriptions, setTransitSubscriptions] = useState<number[]>([]);
-  
-  // Stop search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ stopId: string; stopName: string }[]>([]);
   const [selectedStop, setSelectedStop] = useState<{ stopId: string; stopName: string } | null>(null);
@@ -39,29 +42,41 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
   const [selectedDirection, setSelectedDirection] = useState('uptown');
   const [addingSubscription, setAddingSubscription] = useState(false);
 
+  const [stepIndex, setStepIndex] = useState(0);
+
+  const steps = useMemo(() => {
+    if (editWidget) {
+      return ['Configure', 'Display', 'Review'];
+    }
+    return ['Type', 'Configure', 'Display', 'Review'];
+  }, [editWidget]);
+
+  const isLastStep = stepIndex === steps.length - 1;
+
   useEffect(() => {
     if (editWidget) {
+      const config = (editWidget.config || {}) as Record<string, any>;
       setWidgetType(editWidget.type);
       setDuration(editWidget.duration);
       setEnabled(editWidget.enabled);
 
       switch (editWidget.type) {
         case 'message':
-          setMessageText(editWidget.config.text);
-          setMessageColor(editWidget.config.color);
-          setMessageScroll(editWidget.config.scroll);
+          setMessageText(typeof config.text === 'string' ? config.text : '');
+          setMessageColor(typeof config.color === 'string' ? config.color : '#00FF00');
+          setMessageScroll(typeof config.scroll === 'boolean' ? config.scroll : true);
           break;
         case 'clock':
-          setClockFormat(editWidget.config.format);
-          setClockShowDate(editWidget.config.showDate);
-          setClockTimezone(editWidget.config.timezone);
+          setClockFormat(config.format === '24h' ? '24h' : '12h');
+          setClockShowDate(typeof config.showDate === 'boolean' ? config.showDate : true);
+          setClockTimezone(typeof config.timezone === 'string' && config.timezone.trim().length > 0 ? config.timezone : 'America/New_York');
           break;
         case 'transit':
-          setTransitSubscriptions(editWidget.config.subscriptionIds || []);
+          setTransitSubscriptions(Array.isArray(config.subscriptionIds) ? config.subscriptionIds : []);
           break;
       }
+      setStepIndex(0);
     } else {
-      // Reset to defaults when creating new
       setWidgetType('message');
       setDuration(10);
       setEnabled(true);
@@ -72,6 +87,7 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
       setClockShowDate(true);
       setClockTimezone('America/New_York');
       setTransitSubscriptions([]);
+      setStepIndex(0);
     }
   }, [editWidget, isOpen]);
 
@@ -93,6 +109,12 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
 
     return () => clearTimeout(timer);
   }, [isOpen, widgetType, searchQuery]);
+
+  const toggleSubscription = (subId: number) => {
+    setTransitSubscriptions((prev) =>
+      prev.includes(subId) ? prev.filter((id) => id !== subId) : [...prev, subId],
+    );
+  };
 
   const handleSelectStop = async (stop: { stopId: string; stopName: string }) => {
     setSelectedStop(stop);
@@ -156,22 +178,45 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    let config: any;
+  const buildConfig = () => {
     switch (widgetType) {
       case 'message':
-        config = { text: messageText, color: messageColor, scroll: messageScroll };
-        break;
+        return { text: messageText, color: messageColor, scroll: messageScroll };
       case 'clock':
-        config = { format: clockFormat, showDate: clockShowDate, timezone: clockTimezone };
-        break;
+        return { format: clockFormat, showDate: clockShowDate, timezone: clockTimezone };
       case 'transit':
-        config = transitSubscriptions.length > 0 ? { subscriptionIds: transitSubscriptions } : {};
-        break;
+        return transitSubscriptions.length > 0 ? { subscriptionIds: transitSubscriptions } : {};
+      default:
+        return {};
+    }
+  };
+
+  const validateCurrentStep = () => {
+    const currentStep = steps[stepIndex];
+
+    if (currentStep === 'Type') {
+      return Boolean(widgetType);
     }
 
+    if (currentStep === 'Configure') {
+      if (widgetType === 'message') {
+        return messageText.trim().length > 0;
+      }
+      if (widgetType === 'clock') {
+        return (clockTimezone || '').trim().length > 0;
+      }
+      return true;
+    }
+
+    if (currentStep === 'Display') {
+      return duration >= 1;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    const config = buildConfig();
     const data = editWidget
       ? { config, duration, enabled }
       : { type: widgetType, config, duration, enabled };
@@ -180,264 +225,326 @@ export function AddWidgetModal({ isOpen, onClose, onSave, editWidget, subscripti
     onClose();
   };
 
-  const toggleSubscription = (subId: number) => {
-    setTransitSubscriptions(prev =>
-      prev.includes(subId) ? prev.filter(id => id !== subId) : [...prev, subId]
-    );
-  };
-
   if (!isOpen) return null;
 
+  const typeCards: Array<{ id: WidgetType; title: string; description: string; label: string }> = [
+    { id: 'message', title: 'Message', description: 'Broadcast custom announcements and notices.', label: 'MSG' },
+    { id: 'clock', title: 'Clock', description: 'Display time, date, and timezone details.', label: 'CLK' },
+    { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">{editWidget ? 'Edit Widget' : 'Add Widget'}</h2>
-        
-        <form onSubmit={handleSubmit}>
-          {!editWidget && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Widget Type</label>
-              <select
-                value={widgetType}
-                onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-6">
+      <div className="tb-panel w-full rounded-b-none p-4 sm:max-w-3xl sm:rounded-xl2 sm:p-6">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-accent-cyan">Widget Setup</p>
+            <h2 className="mt-1 font-display text-2xl text-ops-100">{editWidget ? 'Edit Widget' : 'Create Widget'}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="tb-btn-secondary px-3 py-1.5">Close</button>
+        </div>
+
+        <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {steps.map((step, idx) => {
+            const active = idx === stepIndex;
+            const complete = idx < stepIndex;
+            return (
+              <div
+                key={step}
+                className={`rounded-lg border px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.08em] ${
+                  active
+                    ? 'border-accent-cyan bg-accent-cyan/20 text-accent-cyan'
+                    : complete
+                      ? 'border-accent-mint/60 bg-accent-mint/20 text-accent-mint'
+                      : 'border-ops-700 text-ops-300'
+                }`}
               >
-                <option value="message">Message</option>
-                <option value="clock">Clock</option>
-                <option value="transit">Transit</option>
-              </select>
+                {step}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="tb-panel-soft mb-5 p-4">
+          {steps[stepIndex] === 'Type' && (
+            <div>
+              <label className="tb-label">Widget Type</label>
+              <div className="grid gap-3 md:grid-cols-3">
+                {typeCards.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => setWidgetType(card.id)}
+                    className={`rounded-lg border p-4 text-left transition ${
+                      widgetType === card.id
+                        ? 'border-accent-cyan bg-accent-cyan/10 shadow-glow'
+                        : 'border-ops-700 bg-ops-950/45 hover:border-ops-500'
+                    }`}
+                  >
+                    <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent-amber">{card.label}</p>
+                    <p className="mt-2 font-display text-lg text-ops-100">{card.title}</p>
+                    <p className="mt-1 text-sm text-ops-200">{card.description}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {widgetType === 'message' && (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Message Text</label>
-                <textarea
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  rows={3}
-                  required
-                  placeholder="Enter your message..."
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Text Color</label>
-                <div className="flex gap-2">
-                  <input
-                    type="color"
-                    value={messageColor}
-                    onChange={(e) => setMessageColor(e.target.value)}
-                    className="h-10"
+          {steps[stepIndex] === 'Configure' && (
+            <div>
+              {widgetType === 'message' && (
+                <>
+                  <label className="tb-label">Message Text</label>
+                  <textarea
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    className="tb-input mb-4 min-h-[96px]"
+                    placeholder="Enter your message..."
+                    required
                   />
+                  <label className="tb-label">Text Color</label>
+                  <div className="mb-4 flex gap-2">
+                    <input
+                      type="color"
+                      value={messageColor}
+                      onChange={(e) => setMessageColor(e.target.value)}
+                      className="h-10 w-14 rounded border border-ops-600 bg-ops-900"
+                    />
+                    <input
+                      type="text"
+                      value={messageColor}
+                      onChange={(e) => setMessageColor(e.target.value)}
+                      className="tb-input"
+                      placeholder="#00FF00"
+                    />
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-sm text-ops-100">
+                    <input
+                      type="checkbox"
+                      checked={messageScroll}
+                      onChange={(e) => setMessageScroll(e.target.checked)}
+                    />
+                    Enable scrolling
+                  </label>
+                </>
+              )}
+
+              {widgetType === 'clock' && (
+                <>
+                  <label className="tb-label">Time Format</label>
+                  <select
+                    value={clockFormat}
+                    onChange={(e) => setClockFormat(e.target.value as '12h' | '24h')}
+                    className="tb-input mb-4"
+                  >
+                    <option value="12h">12-hour</option>
+                    <option value="24h">24-hour</option>
+                  </select>
+
+                  <label className="inline-flex items-center gap-2 text-sm text-ops-100">
+                    <input
+                      type="checkbox"
+                      checked={clockShowDate}
+                      onChange={(e) => setClockShowDate(e.target.checked)}
+                    />
+                    Show date
+                  </label>
+
+                  <label className="tb-label mt-4">Timezone</label>
                   <input
                     type="text"
-                    value={messageColor}
-                    onChange={(e) => setMessageColor(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-                    placeholder="#00FF00"
+                    value={clockTimezone}
+                    onChange={(e) => setClockTimezone(e.target.value)}
+                    className="tb-input"
+                    placeholder="America/New_York"
                   />
-                </div>
-              </div>
-              <div className="mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={messageScroll}
-                    onChange={(e) => setMessageScroll(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm font-medium">Enable scrolling</span>
-                </label>
-              </div>
-            </>
-          )}
-
-          {widgetType === 'clock' && (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Time Format</label>
-                <select
-                  value={clockFormat}
-                  onChange={(e) => setClockFormat(e.target.value as '12h' | '24h')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="12h">12-hour</option>
-                  <option value="24h">24-hour</option>
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={clockShowDate}
-                    onChange={(e) => setClockShowDate(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm font-medium">Show date</span>
-                </label>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Timezone</label>
-                <input
-                  type="text"
-                  value={clockTimezone}
-                  onChange={(e) => setClockTimezone(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="America/New_York"
-                />
-              </div>
-            </>
-          )}
-
-          {widgetType === 'transit' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Add stop subscription</label>
-
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search stop name (e.g. Pelham, Times Sq)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
-              />
-
-              {searchResults.length > 0 && (
-                <div className="border border-gray-300 rounded-md max-h-40 overflow-y-auto mb-3">
-                  {searchResults.map((stop) => (
-                    <button
-                      key={stop.stopId}
-                      type="button"
-                      onClick={() => handleSelectStop(stop)}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0"
-                    >
-                      {stop.stopName}
-                    </button>
-                  ))}
-                </div>
+                </>
               )}
 
-              {selectedStop && (
-                <div className="border border-gray-300 rounded-md p-3 mb-3 bg-gray-50">
-                  <p className="text-sm mb-2"><strong>Stop:</strong> {selectedStop.stopName}</p>
+              {widgetType === 'transit' && (
+                <>
+                  <label className="tb-label">Add Stop Subscription</label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search stop name (e.g. Pelham, Times Sq)"
+                    className="tb-input mb-2"
+                  />
 
-                  <label className="block text-sm font-medium mb-1">Line</label>
-                  <select
-                    value={selectedRoute}
-                    onChange={(e) => setSelectedRoute(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
-                  >
-                    {availableRoutes.length === 0 ? (
-                      <option value="">No lines found for this stop</option>
-                    ) : (
-                      availableRoutes.map((route) => (
-                        <option key={route.routeId} value={route.routeShortName}>
-                          {route.routeShortName}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  {searchResults.length > 0 && (
+                    <div className="mb-3 max-h-40 overflow-y-auto rounded-lg border border-ops-700 bg-ops-950/70">
+                      {searchResults.map((stop) => (
+                        <button
+                          key={stop.stopId}
+                          type="button"
+                          onClick={() => handleSelectStop(stop)}
+                          className="block w-full border-b border-ops-700 px-3 py-2 text-left text-sm text-ops-100 hover:bg-ops-800/75 last:border-none"
+                        >
+                          {stop.stopName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
-                  <label className="block text-sm font-medium mb-1">Direction</label>
-                  <select
-                    value={selectedDirection}
-                    onChange={(e) => setSelectedDirection(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md mb-3"
-                  >
-                    <option value="uptown">Uptown / North</option>
-                    <option value="downtown">Downtown / South</option>
-                  </select>
+                  {selectedStop && (
+                    <div className="mb-3 rounded-lg border border-ops-700 bg-ops-950/75 p-3">
+                      <p className="mb-2 text-sm text-ops-100"><strong>Stop:</strong> {selectedStop.stopName}</p>
+                      <label className="tb-label">Line</label>
+                      <select
+                        value={selectedRoute}
+                        onChange={(e) => setSelectedRoute(e.target.value)}
+                        className="tb-input mb-2"
+                      >
+                        {availableRoutes.length === 0 ? (
+                          <option value="">No lines found for this stop</option>
+                        ) : (
+                          availableRoutes.map((route) => (
+                            <option key={route.routeId} value={route.routeShortName}>
+                              {route.routeShortName}
+                            </option>
+                          ))
+                        )}
+                      </select>
 
-                  <button
-                    type="button"
-                    onClick={handleAddSubscription}
-                    disabled={!selectedRoute || availableRoutes.length === 0 || addingSubscription}
-                    className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
-                  >
-                    {addingSubscription ? 'Adding...' : 'Add Subscription'}
-                  </button>
-                </div>
-              )}
+                      <label className="tb-label">Direction</label>
+                      <select
+                        value={selectedDirection}
+                        onChange={(e) => setSelectedDirection(e.target.value)}
+                        className="tb-input mb-3"
+                      >
+                        <option value="uptown">Uptown / North</option>
+                        <option value="downtown">Downtown / South</option>
+                      </select>
 
-              <label className="block text-sm font-medium mb-2">
-                Transit routes to display {transitSubscriptions.length === 0 && '(all routes)'}
-              </label>
-              {subscriptions.length === 0 ? (
-                <p className="text-gray-500 text-sm">No subscriptions yet for this device</p>
-              ) : (
-                <div className="border border-gray-300 rounded-md p-3 max-h-60 overflow-y-auto">
-                  {subscriptions.map((sub) => (
-                    <div key={sub.id} className="flex items-center justify-between py-2 hover:bg-gray-50">
-                      <label className="flex items-center cursor-pointer flex-1">
-                        <input
-                          type="checkbox"
-                          checked={transitSubscriptions.includes(sub.id)}
-                          onChange={() => toggleSubscription(sub.id)}
-                          className="mr-3"
-                        />
-                        <span className="text-sm">
-                          <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
-                        </span>
-                      </label>
                       <button
                         type="button"
-                        onClick={() => handleDeleteSubscription(sub.id)}
-                        className="ml-3 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                        onClick={handleAddSubscription}
+                        disabled={!selectedRoute || availableRoutes.length === 0 || addingSubscription}
+                        className="tb-btn-primary"
                       >
-                        Delete
+                        {addingSubscription ? 'Adding...' : 'Add Subscription'}
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                  <label className="tb-label">Subscriptions to Display {transitSubscriptions.length === 0 ? '(All)' : ''}</label>
+                  {subscriptions.length === 0 ? (
+                    <p className="text-sm text-ops-200">No subscriptions yet for this device.</p>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto rounded-lg border border-ops-700 bg-ops-950/70 p-2">
+                      {subscriptions.map((sub) => (
+                        <div key={sub.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-2 hover:bg-ops-800/70">
+                          <label className="flex flex-1 cursor-pointer items-center gap-2 text-sm text-ops-100">
+                            <input
+                              type="checkbox"
+                              checked={transitSubscriptions.includes(sub.id)}
+                              onChange={() => toggleSubscription(sub.id)}
+                            />
+                            <span>
+                              <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
+                            </span>
+                          </label>
+                          <button type="button" onClick={() => handleDeleteSubscription(sub.id)} className="tb-btn-danger">
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
-              <p className="text-xs text-gray-500 mt-2">
-                Leave unselected to show all subscriptions, or select specific ones
-              </p>
             </div>
           )}
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Display Duration (seconds)</label>
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              min={1}
-              max={300}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              required
-            />
-          </div>
+          {steps[stepIndex] === 'Display' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="tb-label">Duration (seconds)</label>
+                <input
+                  type="number"
+                  value={duration}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                  min={1}
+                  max={300}
+                  className="tb-input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="tb-label">Status</label>
+                <label className="inline-flex items-center gap-2 text-sm text-ops-100">
+                  <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+                  Widget enabled
+                </label>
+              </div>
+            </div>
+          )}
 
-          <div className="mb-6">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm font-medium">Widget enabled</span>
-            </label>
-          </div>
+          {steps[stepIndex] === 'Review' && (
+            <div className="space-y-3 text-sm text-ops-100">
+              <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                <p><strong>Type:</strong> {widgetType}</p>
+                <p><strong>Duration:</strong> {duration}s</p>
+                <p><strong>Status:</strong> {enabled ? 'Enabled' : 'Disabled'}</p>
+              </div>
+              {widgetType === 'message' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Message:</strong> {messageText || '(empty)'}</p>
+                  <p><strong>Color:</strong> {messageColor}</p>
+                  <p><strong>Scroll:</strong> {messageScroll ? 'On' : 'Off'}</p>
+                </div>
+              )}
+              {widgetType === 'clock' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Format:</strong> {clockFormat}</p>
+                  <p><strong>Show Date:</strong> {clockShowDate ? 'Yes' : 'No'}</p>
+                  <p><strong>Timezone:</strong> {clockTimezone}</p>
+                </div>
+              )}
+              {widgetType === 'transit' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Selected Subscriptions:</strong> {transitSubscriptions.length || 'All'}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-          <div className="flex justify-end gap-3">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          <button type="button" onClick={onClose} className="tb-btn-secondary">
+            Cancel
+          </button>
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              onClick={() => setStepIndex((s) => Math.max(0, s - 1))}
+              disabled={stepIndex === 0}
+              className="tb-btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              Back
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              {editWidget ? 'Save Changes' : 'Add Widget'}
-            </button>
+            {!isLastStep && (
+              <button
+                type="button"
+                onClick={() => setStepIndex((s) => Math.min(steps.length - 1, s + 1))}
+                disabled={!validateCurrentStep()}
+                className="tb-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            )}
+            {isLastStep && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="tb-btn-primary"
+              >
+                {editWidget ? 'Save Changes' : 'Add Widget'}
+              </button>
+            )}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
