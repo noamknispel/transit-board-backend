@@ -353,6 +353,7 @@ print("Starting main loop")
 widgets = []           # widget list
 current_widget = 0     # current widget index
 current_duration = 10  # default duration
+widget_signature = ""  # track widget list changes from backend
 
 last_poll = -POLL_INTERVAL   # force immediate poll on first iteration
 last_rotation = time.monotonic()
@@ -366,20 +367,42 @@ while True:
         result = fetch_data()
 
         if result is not None:
-            widgets = result
-            
-            if len(widgets) == 0:
+            new_widgets = result
+
+            if len(new_widgets) == 0:
                 set_status("No widgets")
-            else:
+                widgets = []
                 current_widget = 0
-                render_widget(widgets[current_widget])
-                current_duration = widgets[current_widget].get("duration", 10)
+                current_duration = 10
+                widget_signature = ""
+            else:
+                new_signature = "|".join([
+                    str(w.get("id", "")) + ":" + str(w.get("type", "")) + ":" + str(w.get("duration", ""))
+                    for w in new_widgets
+                ])
+
+                widgets = new_widgets
+
+                # Keep current widget position unless list/order/duration changed.
+                if current_widget >= len(widgets):
+                    current_widget = 0
+
+                if new_signature != widget_signature:
+                    render_widget(widgets[current_widget])
+                    current_duration = widgets[current_widget].get("duration", 10)
+                    last_rotation = now
+                    widget_signature = new_signature
+                else:
+                    # Still refresh duration in case backend changed only current item config.
+                    current_duration = widgets[current_widget].get("duration", current_duration)
         else:
             set_status("No data")
             widgets = []
+            current_widget = 0
+            current_duration = 10
+            widget_signature = ""
 
         last_poll = time.monotonic()
-        last_rotation = time.monotonic()
 
     # --- Widget rotation ---
     elif widgets and len(widgets) > 1:
