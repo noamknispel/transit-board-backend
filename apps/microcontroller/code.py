@@ -41,6 +41,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://192.168.1.1:3010")
 DEVICE_ID = os.getenv("DEVICE_ID", "")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
 PAGE_DURATION = int(os.getenv("PAGE_DURATION", "5"))
+RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY", "2"))
 
 # ---------------------------------------------------------------------------
 # MTA Line Colors
@@ -435,11 +436,36 @@ esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
 pool = adafruit_esp32spi_socketpool.SocketPool(esp)
 requests = adafruit_requests.Session(pool)
 
+
+def init_http_session():
+    """Recreate socket pool + HTTP session for ESP32 SPI stack."""
+    global pool
+    global requests
+    pool = adafruit_esp32spi_socketpool.SocketPool(esp)
+    requests = adafruit_requests.Session(pool)
+
+
+def reconnect_wifi():
+    """Reconnect WiFi and refresh HTTP session after transport failures."""
+    print("Reconnecting WiFi...")
+    set_status("Reconnect")
+    try:
+        esp.connect_AP(SSID, PASSWORD)
+        init_http_session()
+        print("Reconnected. IP:", esp.ip_address)
+        set_status("Connected")
+        time.sleep(0.5)
+        return True
+    except Exception as reconnect_error:
+        print("Reconnect error:", reconnect_error)
+        return False
+
 print("Connecting to WiFi:", SSID)
 set_status("Connecting")
 
 try:
     esp.connect_AP(SSID, PASSWORD)
+    init_http_session()
     print("Connected. IP:", esp.ip_address)
     set_status("Connected")
     time.sleep(1)  # Show connected status briefly
@@ -453,25 +479,34 @@ except Exception as e:
 def fetch_data():
     """Fetch widget data from backend. Returns list of widgets or None on error."""
     url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
-    print("Fetching:", url)
-    try:
-        response = requests.get(url, timeout=10)
-        print("Response status:", response.status_code)
-        if response.status_code == 200:
-            payload = response.json()
-            widgets = payload.get("widgets", [])
-            print("Received {} widgets".format(len(widgets)))
-            response.close()
-            return widgets
-        else:
+    for attempt in range(2):
+        print("Fetching:", url, "(attempt", attempt + 1, ")")
+        try:
+            response = requests.get(url, timeout=10)
+            print("Response status:", response.status_code)
+            if response.status_code == 200:
+                payload = response.json()
+                widgets = payload.get("widgets", [])
+                print("Received {} widgets".format(len(widgets)))
+                response.close()
+                return widgets
+
             print("HTTP error:", response.status_code)
             response.close()
             return None
-    except Exception as e:
-        print("Fetch error:", e)
-        import traceback
-        traceback.print_exception(e)
-        return None
+        except Exception as e:
+            print("Fetch error:", e)
+            import traceback
+            traceback.print_exception(e)
+
+            # Retry once after reconnecting transport/session.
+            if attempt == 0:
+                time.sleep(RECONNECT_DELAY)
+                if reconnect_wifi():
+                    continue
+            return None
+
+    return None
 
 
 # ---------------------------------------------------------------------------
