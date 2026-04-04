@@ -18,6 +18,8 @@ export interface TransitData {
   etas: number[];
   stopId: string;
   routeId?: string;
+  sourceStopName?: string;
+  sourceStopAbbrev?: string;
 }
 
 export class SubscriptionModel {

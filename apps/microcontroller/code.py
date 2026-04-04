@@ -229,6 +229,21 @@ def format_line_for_badge(line):
     return line_text[:2]
 
 
+def get_origin_tag(route):
+    """Return compact source stop indicator tag, e.g. ' [TSQ]'."""
+    source_abbrev = str(route.get("sourceStopAbbrev", "")).strip().upper()
+    if not source_abbrev:
+        stop_id = str(route.get("stopId", "")).strip().upper()
+        if stop_id.endswith("N") or stop_id.endswith("S"):
+            stop_id = stop_id[:-1]
+        source_abbrev = stop_id[-3:] if stop_id else ""
+
+    if not source_abbrev:
+        return ""
+
+    return " [" + source_abbrev[:3] + "]"
+
+
 # ---------------------------------------------------------------------------
 # Widget Rendering Functions
 # ---------------------------------------------------------------------------
@@ -268,12 +283,20 @@ def render_transit_widget(widget_data, page=0):
             line_labels[row].color = 0xFFFFFF
 
             eta_text = " ".join([str(e) + "m" for e in etas[:2]]) if etas else ""
+            origin_tag = get_origin_tag(route)
+
             # Prevent destination text from colliding with right-aligned ETA block.
             # 17 chars roughly fit from x=20 to right edge on this matrix/font.
-            max_dest_chars = max(5, min(12, 17 - len(eta_text) - 1))
+            max_row_chars = max(6, 17 - len(eta_text) - 1)
+
+            # Keep origin tag compact enough to always leave room for destination text.
+            if origin_tag and len(origin_tag) >= (max_row_chars - 1):
+                origin_tag = " [" + origin_tag[-4:-1] + "]"
+
+            max_dest_chars = max(1, min(12, max_row_chars - len(origin_tag)))
             
             # Destination
-            dest_labels[row].text = destination[:max_dest_chars]
+            dest_labels[row].text = destination[:max_dest_chars] + origin_tag
             dest_labels[row].color = 0xFFFFFF
             dest_labels[row].x = 20
             dest_labels[row].anchored_position = (20, ROW_Y[row] + ROW_HEIGHT // 2)

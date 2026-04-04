@@ -10,6 +10,8 @@ interface TempArrival {
   stopId: string;
   routeId: string;
   arrivalTime: string;
+  sourceStopName: string;
+  sourceStopAbbrev: string;
 }
 
 interface FeedCacheEntry {
@@ -210,6 +212,35 @@ export class RealtimeService {
     return this.matchesDirection(tripId, requestedDirection);
   }
 
+  private buildStopAbbrev(stopName: string, stopId: string): string {
+    const cleaned = (stopName || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]+/g, " ")
+      .trim();
+
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    if (tokens.length > 0) {
+      let abbrev = "";
+      for (const token of tokens) {
+        abbrev += token[0];
+        if (abbrev.length >= 3) break;
+      }
+
+      if (abbrev.length < 3) {
+        const joined = tokens.join("");
+        abbrev = (abbrev + joined).slice(0, 3);
+      }
+
+      if (abbrev.length > 0) {
+        return abbrev;
+      }
+    }
+
+    const id = (stopId || "").toUpperCase();
+    const compactId = id.endsWith("N") || id.endsWith("S") ? id.slice(0, -1) : id;
+    return compactId.slice(-3) || "STP";
+  }
+
   private async getArrivalsForStop(
     stopId: string,
     line: string,
@@ -224,6 +255,10 @@ export class RealtimeService {
 
     try {
       const feed = await this.fetchFeed(feedKey);
+
+      const sourceStop = GTFSStopModel.getByIdWithFallback(stopId);
+      const sourceStopName = sourceStop?.stop_name || stopId;
+      const sourceStopAbbrev = this.buildStopAbbrev(sourceStopName, stopId);
 
       const processingStart = Date.now();
       const arrivals: TempArrival[] = [];
@@ -309,6 +344,8 @@ export class RealtimeService {
             stopId: stopId,
             routeId: route.route_id,
             arrivalTime: new Date(arrivalTimestamp * 1000).toISOString(),
+            sourceStopName,
+            sourceStopAbbrev,
           });
 
           break;
@@ -364,7 +401,7 @@ export class RealtimeService {
     const groupedMap = new Map<string, TransitData>();
 
     for (const arrival of allArrivals) {
-      const key = `${arrival.line}-${arrival.direction}-${arrival.finalStopName}`;
+      const key = `${arrival.line}-${arrival.direction}-${arrival.finalStopName}-${arrival.stopId}`;
 
       if (!groupedMap.has(key)) {
         groupedMap.set(key, {
@@ -374,6 +411,8 @@ export class RealtimeService {
           etas: [],
           stopId: arrival.stopId,
           routeId: arrival.routeId,
+          sourceStopName: arrival.sourceStopName,
+          sourceStopAbbrev: arrival.sourceStopAbbrev,
         });
       }
 
