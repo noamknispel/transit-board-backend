@@ -464,20 +464,52 @@ def init_http_session():
     requests = adafruit_requests.Session(pool)
 
 
+def hard_reset_esp32():
+    """Attempt a hardware reset of the ESP32 coprocessor."""
+    print("Hard resetting ESP32...")
+    set_status("ESP reset")
+
+    try:
+        # Preferred reset path exposed by the ESP32 SPI helper.
+        if hasattr(esp, "reset"):
+            esp.reset()
+        else:
+            # Fallback: pulse reset line directly.
+            esp32_reset.value = False
+            time.sleep(0.05)
+            esp32_reset.value = True
+
+        time.sleep(0.75)
+        return True
+    except Exception as reset_error:
+        print("ESP32 reset failed:", reset_error)
+        return False
+
+
 def reconnect_wifi():
     """Reconnect WiFi and refresh HTTP session after transport failures."""
     print("Reconnecting WiFi...")
     set_status("Reconnect")
-    try:
-        esp.connect_AP(SSID, PASSWORD)
-        init_http_session()
-        print("Reconnected. IP:", esp.ip_address)
-        set_status("Connected")
-        time.sleep(0.5)
-        return True
-    except Exception as reconnect_error:
-        print("Reconnect error:", reconnect_error)
-        return False
+    for attempt in range(2):
+        try:
+            esp.connect_AP(SSID, PASSWORD)
+            init_http_session()
+            print("Reconnected. IP:", esp.ip_address)
+            set_status("Connected")
+            time.sleep(0.5)
+            return True
+        except Exception as reconnect_error:
+            print("Reconnect error:", reconnect_error)
+            err_text = str(reconnect_error)
+
+            # ESP32 SPI transport can lock up; reset once and retry.
+            if attempt == 0 and "Timed out waiting for SPI char" in err_text:
+                if hard_reset_esp32():
+                    continue
+
+            return False
+
+    return False
 
 print("Connecting to WiFi:", SSID)
 set_status("Connecting")
