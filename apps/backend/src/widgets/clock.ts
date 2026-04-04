@@ -34,6 +34,25 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     return true;
   }
 
+  private getShortTimezoneLabel(timezone: string, now: Date): string {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        timeZoneName: "short",
+      }).formatToParts(now);
+
+      const tzName = parts.find((part) => part.type === "timeZoneName")?.value;
+      if (tzName) {
+        return tzName;
+      }
+    } catch {
+      // Fall back to a compact label derived from IANA timezone.
+    }
+
+    const fallback = timezone.split("/").pop() || timezone;
+    return fallback.replace(/_/g, " ");
+  }
+
   async getData(config: any): Promise<any> {
     this.validateConfig(config);
 
@@ -58,11 +77,13 @@ export class ClockWidgetPlugin implements WidgetPlugin {
 
     const timeStr = formatter.format(now);
     const dateStr = showDate ? dateFormatter.format(now) : "";
+    const timezoneShort = this.getShortTimezoneLabel(timezone, now);
 
     return {
       time: timeStr,
       date: dateStr,
-      timezone,
+      timezone: timezoneShort,
+      timezoneId: timezone,
       format,
       timestamp: now.toISOString(),
     };
