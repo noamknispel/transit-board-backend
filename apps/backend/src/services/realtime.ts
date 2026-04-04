@@ -12,6 +12,11 @@ interface TempArrival {
   arrivalTime: string;
 }
 
+interface FeedCacheEntry {
+  feed: any;
+  fetchedAt: number;
+}
+
 const FEED_URLS: Record<string, string> = {
   ACE: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
   BDFM: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
@@ -51,6 +56,13 @@ const LINE_TO_FEED: Record<string, string> = {
 };
 
 export class RealtimeService {
+  private static readonly FEED_CACHE_TTL_MS =
+    Math.max(1, Number(process.env.MTA_REALTIME_CACHE_TTL_SECONDS || "15")) *
+    1000;
+
+  private static feedCache = new Map<string, FeedCacheEntry>();
+  private static inFlightFetches = new Map<string, Promise<any>>();
+
   constructor() {}
 
   private getFeedKeyForLine(line: string): string | undefined {
@@ -63,28 +75,55 @@ export class RealtimeService {
       throw new Error(`No feed URL found for feed key: ${feedKey}`);
     }
 
+    const now = Date.now();
+    const cached = RealtimeService.feedCache.get(feedKey);
+    if (cached && now - cached.fetchedAt < RealtimeService.FEED_CACHE_TTL_MS) {
+      console.log(
+        `Using cached MTA realtime feed: ${feedKey} (age ${now - cached.fetchedAt}ms)`,
+      );
+      return cached.feed;
+    }
+
+    const inFlight = RealtimeService.inFlightFetches.get(feedKey);
+    if (inFlight) {
+      console.log(`Awaiting in-flight MTA realtime feed request: ${feedKey}`);
+      return inFlight;
+    }
+
     console.log(`Fetching MTA realtime feed: ${feedKey} from ${feedUrl}`);
 
-    try {
-      const response = await fetch(feedUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feed: ${response.statusText}`);
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch(feedUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch feed: ${response.statusText}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const feed = GtfsRealtimeBindings.FeedMessage.decode(
+          new Uint8Array(buffer),
+        );
+
+        RealtimeService.feedCache.set(feedKey, {
+          feed,
+          fetchedAt: Date.now(),
+        });
+
+        console.log(
+          `Successfully fetched MTA feed ${feedKey}, entities: ${feed.entity?.length || 0}`,
+        );
+
+        return feed;
+      } catch (error) {
+        console.error(`Error fetching GTFS-RT feed for ${feedKey}:`, error);
+        throw error;
+      } finally {
+        RealtimeService.inFlightFetches.delete(feedKey);
       }
+    })();
 
-      const buffer = await response.arrayBuffer();
-      const feed = GtfsRealtimeBindings.FeedMessage.decode(
-        new Uint8Array(buffer),
-      );
-
-      console.log(
-        `Successfully fetched MTA feed ${feedKey}, entities: ${feed.entity?.length || 0}`,
-      );
-
-      return feed;
-    } catch (error) {
-      console.error(`Error fetching GTFS-RT feed for ${feedKey}:`, error);
-      throw error;
-    }
+    RealtimeService.inFlightFetches.set(feedKey, fetchPromise);
+    return fetchPromise;
   }
 
   private calculateETAMinutes(timestamp: number): number {
