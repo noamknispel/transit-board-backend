@@ -203,6 +203,7 @@ def set_status(msg):
     dest_labels[0].x = 2
     dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
+    origin_labels[0].text = ""
     clear_row(1)
 
 
@@ -353,6 +354,7 @@ def render_message_widget(widget_data):
     dest_labels[0].x = 2
     dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
+    origin_labels[0].text = ""
     
     clear_row(1)
 
@@ -380,6 +382,7 @@ def render_clock_widget(widget_data):
     dest_labels[0].x = 2
     dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
+    origin_labels[0].text = ""
     
     # Line 1: Time
     line_labels[1].text = ""
@@ -402,6 +405,7 @@ def render_clock_widget(widget_data):
     dest_labels[1].x = 2
     dest_labels[1].anchored_position = (2, ROW_Y[1] + ROW_HEIGHT // 2)
     eta_labels[1].text = ""
+    origin_labels[1].text = ""
 
 
 def render_widget(widget, reset_transit_page=True):
