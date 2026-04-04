@@ -97,6 +97,20 @@ class ApiClient {
     const response = await this.request<{ routes: { routeId: string; routeShortName: string; routeLongName: string; color?: string }[] }>(`/stops/${encodeURIComponent(stopId)}/routes`);
     return response.routes;
   }
+
+  async geocodeCities(query: string): Promise<Array<{ name: string; latitude: number; longitude: number; country?: string }>> {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Geocoding failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as {
+      results?: Array<{ name: string; latitude: number; longitude: number; country?: string }>;
+    };
+
+    return payload.results || [];
+  }
 }
 
 export const api = new ApiClient();

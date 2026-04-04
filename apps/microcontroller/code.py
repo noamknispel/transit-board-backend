@@ -366,6 +366,7 @@ def render_clock_widget(widget_data):
     time_str = widget_data.get("time", "")
     date_str = widget_data.get("date", "")
     timezone = widget_data.get("timezone", "")
+    weather = widget_data.get("weather", {})
 
     hide_line_badge(0)
     hide_line_badge(1)
@@ -382,7 +383,21 @@ def render_clock_widget(widget_data):
     
     # Line 1: Time
     line_labels[1].text = ""
-    dest_labels[1].text = time_str[:20]
+    weather_str = ""
+    if isinstance(weather, dict):
+      temp = weather.get("temp")
+      unit = str(weather.get("unit", "")).upper()
+      summary = str(weather.get("summary", "")).upper()
+      if temp is not None and unit in ("F", "C"):
+          weather_str = str(temp) + unit
+          if summary:
+              weather_str += " " + summary[:4]
+
+    line2_text = time_str
+    if weather_str:
+        line2_text = (time_str + " " + weather_str).strip()
+
+    dest_labels[1].text = line2_text[:20]
     dest_labels[1].color = 0xFFFFFF
     dest_labels[1].x = 2
     dest_labels[1].anchored_position = (2, ROW_Y[1] + ROW_HEIGHT // 2)
