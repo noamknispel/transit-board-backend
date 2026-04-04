@@ -62,6 +62,7 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     return {
       time: timeStr,
       date: dateStr,
+      timezone,
       format,
       timestamp: now.toISOString(),
     };

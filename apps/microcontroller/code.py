@@ -245,25 +245,26 @@ def render_message_widget(widget_data):
 def render_clock_widget(widget_data):
     """
     CLOCK WIDGET - 2 Lines
-    Line 0: Time
-    Line 1: Date and Timezone
+    Line 0: Date and Timezone
+    Line 1: Time
     """
     time_str = widget_data.get("time", "")
     date_str = widget_data.get("date", "")
     timezone = widget_data.get("timezone", "")
+
+    date_display = (date_str + " " + timezone).strip()
     
-    # Line 0: Time
+    # Line 0: Date + Timezone
     line_labels[0].text = ""
-    dest_labels[0].text = time_str[:20]
+    dest_labels[0].text = date_display[:20]
     dest_labels[0].color = 0xFFFFFF
     dest_labels[0].x = 2
     dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
     eta_labels[0].text = ""
     
-    # Line 1: Date + Timezone
+    # Line 1: Time
     line_labels[1].text = ""
-    date_display = (date_str + " " + timezone).strip() if timezone else date_str
-    dest_labels[1].text = date_display[:20]
+    dest_labels[1].text = time_str[:20]
     dest_labels[1].color = 0xFFFFFF
     dest_labels[1].x = 2
     dest_labels[1].anchored_position = (2, ROW_Y[1] + ROW_HEIGHT // 2)
