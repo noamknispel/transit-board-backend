@@ -26,7 +26,7 @@ export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice, onAd
       <select
         value={selectedDeviceId || ''}
         onChange={(e) => onSelectDevice(e.target.value)}
-        className="tb-input"
+        className="tb-select"
       >
         <option value="">-- Select a device --</option>
         {devices.map((device) => (

@@ -53,7 +53,52 @@ body {
     @apply w-full rounded-lg border border-ops-600 bg-ops-950/70 px-3 py-2 text-sm text-ops-100 placeholder:text-ops-300/75 focus:border-accent-cyan focus:outline-none focus:ring-2 focus:ring-accent-cyan/30;
   }
 
+  .tb-select {
+    @apply tb-input cursor-pointer appearance-none pr-10;
+    background-image: linear-gradient(45deg, transparent 50%, #86aed0 50%), linear-gradient(135deg, #86aed0 50%, transparent 50%);
+    background-position: calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+  }
+
+  .tb-select:focus {
+    background-image: linear-gradient(45deg, transparent 50%, #27d3d0 50%), linear-gradient(135deg, #27d3d0 50%, transparent 50%);
+  }
+
+  .tb-select option {
+    background-color: #0b1f33;
+    color: #e2f0fb;
+  }
+
   .tb-label {
     @apply mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-ops-300;
+  }
+
+  .tb-check-label {
+    @apply inline-flex items-center gap-2 text-sm text-ops-100;
+  }
+
+  .tb-checkbox {
+    @apply h-4 w-4 cursor-pointer appearance-none rounded border border-ops-500/80 bg-ops-950/80 align-middle transition;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 10px 10px;
+  }
+
+  .tb-checkbox:hover {
+    @apply border-accent-cyan/70;
+  }
+
+  .tb-checkbox:focus-visible {
+    @apply outline-none ring-2 ring-accent-cyan/35 ring-offset-2 ring-offset-ops-900;
+  }
+
+  .tb-checkbox:checked {
+    @apply border-accent-cyan bg-accent-cyan;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.2 8.2 6.4 11.3 12.9 4.8' stroke='%23071422' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .tb-checkbox:disabled {
+    @apply cursor-not-allowed opacity-50;
   }
 }

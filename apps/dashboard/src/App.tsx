@@ -6,6 +6,8 @@ import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
 
+const LAST_DEVICE_STORAGE_KEY = 'transit-board:last-selected-device-id';
+
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -16,6 +18,26 @@ function App() {
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const getStoredDeviceId = (): string | null => {
+    try {
+      return localStorage.getItem(LAST_DEVICE_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  };
+
+  const setStoredDeviceId = (deviceId: string | null) => {
+    try {
+      if (deviceId) {
+        localStorage.setItem(LAST_DEVICE_STORAGE_KEY, deviceId);
+      } else {
+        localStorage.removeItem(LAST_DEVICE_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage errors (private mode, quota, etc.) and continue normally.
+    }
+  };
 
   // Load devices on mount
   useEffect(() => {
@@ -38,6 +60,13 @@ function App() {
       setError(null);
       const data = await api.getDevices();
       setDevices(data);
+
+      const storedDeviceId = getStoredDeviceId();
+      if (storedDeviceId && data.some((device) => device.id === storedDeviceId)) {
+        setSelectedDeviceId(storedDeviceId);
+      } else if (storedDeviceId) {
+        setStoredDeviceId(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load devices');
     }
@@ -71,7 +100,9 @@ function App() {
   };
 
   const handleSelectDevice = (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
+    const nextDeviceId = deviceId || null;
+    setSelectedDeviceId(nextDeviceId);
+    setStoredDeviceId(nextDeviceId);
   };
 
   const handleAddDevice = () => {
@@ -86,6 +117,7 @@ function App() {
       await loadDevices();
       // Auto-select the newly created device
       setSelectedDeviceId(result.deviceId);
+      setStoredDeviceId(result.deviceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create device');
     } finally {

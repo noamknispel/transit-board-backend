@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetType } from '../types';
+import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetType } from '../types';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -33,7 +33,6 @@ export function AddWidgetModal({
   const [clockShowDate, setClockShowDate] = useState(true);
   const [clockTimezone, setClockTimezone] = useState('America/New_York');
 
-  const [transitSubscriptions, setTransitSubscriptions] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ stopId: string; stopName: string }[]>([]);
   const [selectedStop, setSelectedStop] = useState<{ stopId: string; stopName: string } | null>(null);
@@ -72,7 +71,6 @@ export function AddWidgetModal({
           setClockTimezone(typeof config.timezone === 'string' && config.timezone.trim().length > 0 ? config.timezone : 'America/New_York');
           break;
         case 'transit':
-          setTransitSubscriptions(Array.isArray(config.subscriptionIds) ? config.subscriptionIds : []);
           break;
       }
       setStepIndex(0);
@@ -86,7 +84,6 @@ export function AddWidgetModal({
       setClockFormat('12h');
       setClockShowDate(true);
       setClockTimezone('America/New_York');
-      setTransitSubscriptions([]);
       setStepIndex(0);
     }
   }, [editWidget, isOpen]);
@@ -109,12 +106,6 @@ export function AddWidgetModal({
 
     return () => clearTimeout(timer);
   }, [isOpen, widgetType, searchQuery]);
-
-  const toggleSubscription = (subId: number) => {
-    setTransitSubscriptions((prev) =>
-      prev.includes(subId) ? prev.filter((id) => id !== subId) : [...prev, subId],
-    );
-  };
 
   const handleSelectStop = async (stop: { stopId: string; stopName: string }) => {
     setSelectedStop(stop);
@@ -169,7 +160,6 @@ export function AddWidgetModal({
     try {
       setAddingSubscription(true);
       await api.deleteSubscription(deviceId, subscriptionId);
-      setTransitSubscriptions((prev) => prev.filter((id) => id !== subscriptionId));
       if (onSubscriptionsChanged) {
         await onSubscriptionsChanged();
       }
@@ -178,14 +168,15 @@ export function AddWidgetModal({
     }
   };
 
-  const buildConfig = () => {
+  const buildConfig = (): WidgetConfig => {
     switch (widgetType) {
       case 'message':
         return { text: messageText, color: messageColor, scroll: messageScroll };
       case 'clock':
         return { format: clockFormat, showDate: clockShowDate, timezone: clockTimezone };
       case 'transit':
-        return transitSubscriptions.length > 0 ? { subscriptionIds: transitSubscriptions } : {};
+        // Transit widget always uses all subscriptions configured for the device.
+        return {};
       default:
         return {};
     }
@@ -217,7 +208,7 @@ export function AddWidgetModal({
 
   const handleSubmit = async () => {
     const config = buildConfig();
-    const data = editWidget
+    const data: CreateWidgetRequest | UpdateWidgetRequest = editWidget
       ? { config, duration, enabled }
       : { type: widgetType, config, duration, enabled };
 
@@ -318,9 +309,10 @@ export function AddWidgetModal({
                       placeholder="#00FF00"
                     />
                   </div>
-                  <label className="inline-flex items-center gap-2 text-sm text-ops-100">
+                  <label className="tb-check-label">
                     <input
                       type="checkbox"
+                      className="tb-checkbox"
                       checked={messageScroll}
                       onChange={(e) => setMessageScroll(e.target.checked)}
                     />
@@ -335,15 +327,16 @@ export function AddWidgetModal({
                   <select
                     value={clockFormat}
                     onChange={(e) => setClockFormat(e.target.value as '12h' | '24h')}
-                    className="tb-input mb-4"
+                    className="tb-select mb-4"
                   >
                     <option value="12h">12-hour</option>
                     <option value="24h">24-hour</option>
                   </select>
 
-                  <label className="inline-flex items-center gap-2 text-sm text-ops-100">
+                  <label className="tb-check-label">
                     <input
                       type="checkbox"
+                      className="tb-checkbox"
                       checked={clockShowDate}
                       onChange={(e) => setClockShowDate(e.target.checked)}
                     />
@@ -394,7 +387,7 @@ export function AddWidgetModal({
                       <select
                         value={selectedRoute}
                         onChange={(e) => setSelectedRoute(e.target.value)}
-                        className="tb-input mb-2"
+                        className="tb-select mb-2"
                       >
                         {availableRoutes.length === 0 ? (
                           <option value="">No lines found for this stop</option>
@@ -411,7 +404,7 @@ export function AddWidgetModal({
                       <select
                         value={selectedDirection}
                         onChange={(e) => setSelectedDirection(e.target.value)}
-                        className="tb-input mb-3"
+                        className="tb-select mb-3"
                       >
                         <option value="uptown">Uptown / North</option>
                         <option value="downtown">Downtown / South</option>
@@ -428,23 +421,16 @@ export function AddWidgetModal({
                     </div>
                   )}
 
-                  <label className="tb-label">Subscriptions to Display {transitSubscriptions.length === 0 ? '(All)' : ''}</label>
+                  <label className="tb-label">Configured Subscriptions</label>
                   {subscriptions.length === 0 ? (
                     <p className="text-sm text-ops-200">No subscriptions yet for this device.</p>
                   ) : (
                     <div className="max-h-60 overflow-y-auto rounded-lg border border-ops-700 bg-ops-950/70 p-2">
                       {subscriptions.map((sub) => (
                         <div key={sub.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-2 hover:bg-ops-800/70">
-                          <label className="flex flex-1 cursor-pointer items-center gap-2 text-sm text-ops-100">
-                            <input
-                              type="checkbox"
-                              checked={transitSubscriptions.includes(sub.id)}
-                              onChange={() => toggleSubscription(sub.id)}
-                            />
-                            <span>
-                              <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
-                            </span>
-                          </label>
+                          <span className="flex-1 text-sm text-ops-100">
+                            <strong>{sub.routeId}</strong> - {sub.stopName} ({sub.direction === 0 ? 'North' : 'South'})
+                          </span>
                           <button type="button" onClick={() => handleDeleteSubscription(sub.id)} className="tb-btn-danger">
                             Delete
                           </button>
@@ -473,8 +459,13 @@ export function AddWidgetModal({
               </div>
               <div>
                 <label className="tb-label">Status</label>
-                <label className="inline-flex items-center gap-2 text-sm text-ops-100">
-                  <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+                <label className="tb-check-label">
+                  <input
+                    type="checkbox"
+                    className="tb-checkbox"
+                    checked={enabled}
+                    onChange={(e) => setEnabled(e.target.checked)}
+                  />
                   Widget enabled
                 </label>
               </div>
@@ -504,7 +495,7 @@ export function AddWidgetModal({
               )}
               {widgetType === 'transit' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
-                  <p><strong>Selected Subscriptions:</strong> {transitSubscriptions.length || 'All'}</p>
+                  <p><strong>Subscriptions:</strong> All current device subscriptions</p>
                 </div>
               )}
             </div>

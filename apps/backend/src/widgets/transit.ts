@@ -41,21 +41,8 @@ export class TransitWidgetPlugin implements WidgetPlugin {
   async getData(config: any, deviceId: string): Promise<{ arrivals: TransitData[] }> {
     this.validateConfig(config);
 
-    // Get subscriptions for this device
-    const allSubscriptions = SubscriptionModel.getByDeviceId(deviceId);
-    let subscriptions = allSubscriptions;
-
-    // If specific subscription IDs are provided, filter to those
-    if (config.subscriptionIds && config.subscriptionIds.length > 0) {
-      const requestedIds = new Set(config.subscriptionIds);
-      subscriptions = subscriptions.filter((sub) => requestedIds.has(sub.id));
-
-      // If widget references stale/deleted IDs, fall back to all current subscriptions
-      // to avoid silent "arrivals: []" failures.
-      if (subscriptions.length === 0 && allSubscriptions.length > 0) {
-        subscriptions = allSubscriptions;
-      }
-    }
+    // Transit widgets always use all subscriptions configured for this device.
+    const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
     if (subscriptions.length === 0) {
       return { arrivals: [] };
