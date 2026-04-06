@@ -26,6 +26,7 @@ export interface TransitWidget extends BaseWidget {
   type: 'transit';
   config: {
     subscriptionIds?: number[];
+    showOriginInitials?: boolean;
   };
 }
 

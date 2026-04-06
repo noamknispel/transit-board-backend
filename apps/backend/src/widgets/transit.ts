@@ -12,6 +12,7 @@ export class TransitWidgetPlugin implements WidgetPlugin {
   description = "Display real-time transit arrival times";
   defaultConfig = {
     subscriptionIds: [] as number[],
+    showOriginInitials: false,
   };
 
   private realtimeService: RealtimeService;
@@ -35,17 +36,31 @@ export class TransitWidgetPlugin implements WidgetPlugin {
       }
     }
 
+    if (
+      config.showOriginInitials !== undefined &&
+      typeof config.showOriginInitials !== "boolean"
+    ) {
+      throw new Error("showOriginInitials must be a boolean");
+    }
+
     return true;
   }
 
-  async getData(config: any, deviceId: string): Promise<{ arrivals: TransitData[] }> {
+  async getData(
+    config: any,
+    deviceId: string,
+  ): Promise<{ arrivals: TransitData[]; showOriginInitials: boolean }> {
     this.validateConfig(config);
+    const showOriginInitials =
+      config?.showOriginInitials !== undefined
+        ? Boolean(config.showOriginInitials)
+        : this.defaultConfig.showOriginInitials;
 
     // Transit widgets always use all subscriptions configured for this device.
     const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
 
     if (subscriptions.length === 0) {
-      return { arrivals: [] };
+      return { arrivals: [], showOriginInitials };
     }
 
     // Fetch real-time data
@@ -57,6 +72,6 @@ export class TransitWidgetPlugin implements WidgetPlugin {
       }))
     );
 
-    return { arrivals };
+    return { arrivals, showOriginInitials };
   }
 }

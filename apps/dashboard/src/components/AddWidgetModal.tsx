@@ -84,6 +84,7 @@ export function AddWidgetModal({
   const [selectedRoute, setSelectedRoute] = useState('');
   const [selectedDirection, setSelectedDirection] = useState('uptown');
   const [addingSubscription, setAddingSubscription] = useState(false);
+  const [showOriginInitials, setShowOriginInitials] = useState(false);
 
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -124,6 +125,7 @@ export function AddWidgetModal({
           setClockLocationResults([]);
           break;
         case 'transit':
+          setShowOriginInitials(typeof config.showOriginInitials === 'boolean' ? config.showOriginInitials : false);
           break;
       }
       setStepIndex(0);
@@ -144,6 +146,7 @@ export function AddWidgetModal({
       setClockLocationName('');
       setClockLocationQuery('');
       setClockLocationResults([]);
+      setShowOriginInitials(false);
       setStepIndex(0);
     }
   }, [editWidget, isOpen]);
@@ -273,7 +276,7 @@ export function AddWidgetModal({
         };
       case 'transit':
         // Transit widget always uses all subscriptions configured for the device.
-        return {};
+        return { showOriginInitials };
       default:
         return {};
     }
@@ -593,6 +596,15 @@ export function AddWidgetModal({
                   )}
 
                   <label className="tb-label">Configured Subscriptions</label>
+                  <label className="tb-check-label mb-3">
+                    <input
+                      type="checkbox"
+                      className="tb-checkbox"
+                      checked={showOriginInitials}
+                      onChange={(e) => setShowOriginInitials(e.target.checked)}
+                    />
+                    Show source stop initials tag (e.g. -TS)
+                  </label>
                   {subscriptions.length === 0 ? (
                     <p className="text-sm text-ops-200">No subscriptions yet for this device.</p>
                   ) : (
@@ -671,6 +683,7 @@ export function AddWidgetModal({
               {widgetType === 'transit' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Subscriptions:</strong> All current device subscriptions</p>
+                  <p><strong>Source Initials Tag:</strong> {showOriginInitials ? 'On' : 'Off'}</p>
                 </div>
               )}
             </div>

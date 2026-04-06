@@ -274,6 +274,7 @@ def render_transit_widget(widget_data, page=0):
     """
     # Backend transit widget returns `arrivals`.
     routes = get_transit_routes(widget_data)
+    show_origin_initials = bool(widget_data.get("showOriginInitials", False))
     if not routes:
         set_status("No trains")
         return
@@ -301,7 +302,7 @@ def render_transit_widget(widget_data, page=0):
             line_labels[row].color = 0xFFFFFF
 
             eta_text = " ".join([str(e) + "m" for e in etas[:2]]) if etas else ""
-            origin_tag = get_origin_tag(route)
+            origin_tag = get_origin_tag(route) if show_origin_initials else ""
 
             # Place ETA at right edge, then place origin tag just to its left.
             eta_labels[row].text = eta_text
