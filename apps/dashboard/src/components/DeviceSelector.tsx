@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Device } from '../types';
 
 interface DeviceSelectorProps {
@@ -8,6 +9,21 @@ interface DeviceSelectorProps {
 }
 
 export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice, onAddDevice }: DeviceSelectorProps) {
+  const [copied, setCopied] = useState(false);
+  const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || null;
+
+  const copyDeviceId = async () => {
+    if (!selectedDevice) return;
+
+    try {
+      await navigator.clipboard.writeText(selectedDevice.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
     <div className="tb-panel mb-6 p-5 md:p-6">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -35,6 +51,20 @@ export function DeviceSelector({ devices, selectedDeviceId, onSelectDevice, onAd
           </option>
         ))}
       </select>
+
+      {selectedDevice && (
+        <div className="mt-3 rounded-lg border border-ops-700/70 bg-ops-950/55 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-ops-300">Device ID</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <code className="break-all rounded bg-ops-900/70 px-2 py-1 font-mono text-xs text-ops-100">
+              {selectedDevice.id}
+            </code>
+            <button type="button" className="tb-btn-secondary px-3 py-1.5" onClick={copyDeviceId}>
+              {copied ? 'Copied' : 'Copy ID'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
