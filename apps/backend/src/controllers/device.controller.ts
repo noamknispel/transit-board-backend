@@ -1,8 +1,7 @@
 import { DeviceModel } from "../models/device";
 import { SubscriptionModel } from "../models/subscription";
-import { RealtimeService } from "../services/realtime";
-
-const realtimeService = new RealtimeService();
+import { GTFSStopModel, GTFSRouteModel } from "../models/gtfs";
+import { getWidgetsData } from "./widget.controller.js";
 
 const jsonResponse = (data: any, status = 200) => {
   return new Response(JSON.stringify(data), {
@@ -34,12 +33,52 @@ export const createSubscription = async (req: Request, deviceId: string) => {
       direction: string;
       stopId: string;
     };
+
+    // Directional stop IDs are authoritative. If the stop ends with N/S,
+    // force the direction to match to avoid zero-arrival mismatches.
+    const stopId = (body.stopId || "").trim();
+    const rawDirection = (body.direction || "").trim().toLowerCase();
+    let normalizedDirection = rawDirection;
+
+    if (stopId.endsWith("N")) {
+      normalizedDirection = "uptown";
+    } else if (stopId.endsWith("S")) {
+      normalizedDirection = "downtown";
+    } else if (rawDirection === "n" || rawDirection === "north") {
+      normalizedDirection = "uptown";
+    } else if (rawDirection === "s" || rawDirection === "south") {
+      normalizedDirection = "downtown";
+    }
+
+    // Validate that the requested line actually serves this stop.
+    // Accept matching by either route_short_name (e.g. "2") or route_id.
+    const availableRoutes = GTFSRouteModel.getRoutesByStop(stopId);
+    const requestedLine = (body.line || "").trim().toUpperCase();
+    const servesStop = availableRoutes.some((route) => {
+      const shortName = (route.route_short_name || "").toUpperCase();
+      const routeId = (route.route_id || "").toUpperCase();
+      return requestedLine === shortName || requestedLine === routeId;
+    });
+
+    if (!servesStop) {
+      const available = availableRoutes
+        .map((r) => r.route_short_name || r.route_id)
+        .filter((v): v is string => Boolean(v));
+      return jsonResponse(
+        {
+          error: `Line ${body.line} does not serve stop ${stopId}`,
+          availableLines: available,
+        },
+        400,
+      );
+    }
+
     const subscription = SubscriptionModel.create(
       deviceId,
       body.provider,
       body.line,
-      body.direction,
-      body.stopId,
+      normalizedDirection,
+      stopId,
     );
     return jsonResponse(
       {
@@ -89,7 +128,29 @@ export const listSubscriptions = async (deviceId: string) => {
   }
 
   const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
-  return jsonResponse({ subscriptions });
+  
+  // Enrich subscriptions with stop names from GTFS data
+  const enrichedSubscriptions = subscriptions.map((sub) => {
+    const stop = GTFSStopModel.getByIdWithFallback(sub.stopId);
+    const stopName = stop?.stop_name || sub.stopId;
+    
+    return {
+      id: sub.id,
+      deviceId: sub.deviceId,
+      stopId: sub.stopId,
+      routeId: sub.line, // Map 'line' to 'routeId' for frontend
+      direction:
+        sub.direction === 'uptown' ||
+        sub.direction === 'north' ||
+        sub.direction === 'n'
+          ? 0
+          : 1,
+      stopName: stopName,
+      createdAt: sub.createdAt,
+    };
+  });
+  
+  return jsonResponse({ subscriptions: enrichedSubscriptions });
 };
 
 export const getDeviceData = async (deviceId: string) => {
@@ -98,15 +159,51 @@ export const getDeviceData = async (deviceId: string) => {
     return jsonResponse({ error: "Device not found" }, 404);
   }
 
-  const subscriptions = SubscriptionModel.getByDeviceId(deviceId);
+  // Always return widget format
+  const widgetsWithData = await getWidgetsData(deviceId);
+  return jsonResponse({ widgets: widgetsWithData });
+};
 
-  const data = await realtimeService.getArrivalsForMultipleStops(
-    subscriptions.map((sub) => ({
-      stopId: sub.stopId,
-      line: sub.line,
-      direction: sub.direction,
-    })),
-  );
+export const searchStops = async (req: Request) => {
+  const url = new URL(req.url);
+  const query = url.searchParams.get("q") || "";
+  
+  if (query.length < 2) {
+    return jsonResponse({ stops: [] });
+  }
+  
+  const stops = GTFSStopModel.searchByName(query);
 
-  return jsonResponse({ data });
+  // Use platform stops so subscriptions can target directional stop IDs (e.g. 211N/211S).
+  const platformStops = stops
+    .filter((stop) => stop.location_type === 0)
+    .slice(0, 100)
+    .map((stop) => {
+      const suffix = stop.stop_id.endsWith("N")
+        ? " (North/Uptown)"
+        : stop.stop_id.endsWith("S")
+          ? " (South/Downtown)"
+          : "";
+      return {
+        stopId: stop.stop_id,
+        stopName: `${stop.stop_name}${suffix}`,
+        lat: stop.stop_lat,
+        lon: stop.stop_lon,
+      };
+    });
+
+  return jsonResponse({ stops: platformStops });
+};
+
+export const getStopRoutes = async (stopId: string) => {
+  const routes = GTFSRouteModel.getRoutesByStop(stopId);
+  
+  const routeList = routes.map(route => ({
+    routeId: route.route_id,
+    routeShortName: route.route_short_name,
+    routeLongName: route.route_long_name,
+    color: route.route_color,
+  }));
+  
+  return jsonResponse({ routes: routeList });
 };

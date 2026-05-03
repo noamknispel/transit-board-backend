@@ -12,3 +12,8 @@ db.exec("PRAGMA journal_mode = WAL;");
 runMigrations(db);
 
 export default db;
+
+// Export function to get database instance
+export function getDb(): Database {
+  return db;
+}

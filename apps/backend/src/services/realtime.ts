@@ -10,6 +10,13 @@ interface TempArrival {
   stopId: string;
   routeId: string;
   arrivalTime: string;
+  sourceStopName: string;
+  sourceStopAbbrev: string;
+}
+
+interface FeedCacheEntry {
+  feed: any;
+  fetchedAt: number;
 }
 
 const FEED_URLS: Record<string, string> = {
@@ -51,6 +58,13 @@ const LINE_TO_FEED: Record<string, string> = {
 };
 
 export class RealtimeService {
+  private static readonly FEED_CACHE_TTL_MS =
+    Math.max(1, Number(process.env.MTA_REALTIME_CACHE_TTL_SECONDS || "15")) *
+    1000;
+
+  private static feedCache = new Map<string, FeedCacheEntry>();
+  private static inFlightFetches = new Map<string, Promise<any>>();
+
   constructor() {}
 
   private getFeedKeyForLine(line: string): string | undefined {
@@ -63,28 +77,55 @@ export class RealtimeService {
       throw new Error(`No feed URL found for feed key: ${feedKey}`);
     }
 
+    const now = Date.now();
+    const cached = RealtimeService.feedCache.get(feedKey);
+    if (cached && now - cached.fetchedAt < RealtimeService.FEED_CACHE_TTL_MS) {
+      console.log(
+        `Using cached MTA realtime feed: ${feedKey} (age ${now - cached.fetchedAt}ms)`,
+      );
+      return cached.feed;
+    }
+
+    const inFlight = RealtimeService.inFlightFetches.get(feedKey);
+    if (inFlight) {
+      console.log(`Awaiting in-flight MTA realtime feed request: ${feedKey}`);
+      return inFlight;
+    }
+
     console.log(`Fetching MTA realtime feed: ${feedKey} from ${feedUrl}`);
 
-    try {
-      const response = await fetch(feedUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feed: ${response.statusText}`);
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch(feedUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch feed: ${response.statusText}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const feed = GtfsRealtimeBindings.FeedMessage.decode(
+          new Uint8Array(buffer),
+        );
+
+        RealtimeService.feedCache.set(feedKey, {
+          feed,
+          fetchedAt: Date.now(),
+        });
+
+        console.log(
+          `Successfully fetched MTA feed ${feedKey}, entities: ${feed.entity?.length || 0}`,
+        );
+
+        return feed;
+      } catch (error) {
+        console.error(`Error fetching GTFS-RT feed for ${feedKey}:`, error);
+        throw error;
+      } finally {
+        RealtimeService.inFlightFetches.delete(feedKey);
       }
+    })();
 
-      const buffer = await response.arrayBuffer();
-      const feed = GtfsRealtimeBindings.FeedMessage.decode(
-        new Uint8Array(buffer),
-      );
-
-      console.log(
-        `Successfully fetched MTA feed ${feedKey}, entities: ${feed.entity?.length || 0}`,
-      );
-
-      return feed;
-    } catch (error) {
-      console.error(`Error fetching GTFS-RT feed for ${feedKey}:`, error);
-      throw error;
-    }
+    RealtimeService.inFlightFetches.set(feedKey, fetchPromise);
+    return fetchPromise;
   }
 
   private calculateETAMinutes(timestamp: number): number {
@@ -106,6 +147,27 @@ export class RealtimeService {
     return 0;
   }
 
+  private normalizeStopId(stopId: string): string {
+    const id = (stopId || "").toUpperCase();
+    if (id.endsWith("N") || id.endsWith("S")) {
+      return id.slice(0, -1);
+    }
+    return id;
+  }
+
+  private stopMatches(requestedStopId: string, feedStopId: string): boolean {
+    const requested = (requestedStopId || "").toUpperCase();
+    const feed = (feedStopId || "").toUpperCase();
+
+    if (requested === feed) return true;
+
+    // Treat station IDs and platform IDs as compatible:
+    // 211 <-> 211N/211S
+    const requestedBase = this.normalizeStopId(requested);
+    const feedBase = this.normalizeStopId(feed);
+    return requestedBase.length > 0 && requestedBase === feedBase;
+  }
+
   private matchesDirection(
     tripId: string,
     requestedDirection: string,
@@ -125,6 +187,60 @@ export class RealtimeService {
     return true;
   }
 
+  private matchesDirectionForStop(
+    tripId: string,
+    requestedDirection: string,
+    realtimeStopId: string,
+  ): boolean {
+    const directionUpper = (requestedDirection || "").toUpperCase();
+    const stopIdUpper = (realtimeStopId || "").toUpperCase();
+
+    // Prefer explicit platform suffix from realtime stop_id.
+    if (stopIdUpper.endsWith("N")) {
+      return (
+        directionUpper.includes("NORTH") || directionUpper.includes("UPTOWN")
+      );
+    }
+    if (stopIdUpper.endsWith("S")) {
+      return (
+        directionUpper.includes("SOUTH") ||
+        directionUpper.includes("DOWNTOWN")
+      );
+    }
+
+    // Fallback to legacy trip_id direction pattern.
+    return this.matchesDirection(tripId, requestedDirection);
+  }
+
+  private buildStopAbbrev(stopName: string, stopId: string): string {
+    const cleaned = (stopName || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]+/g, " ")
+      .trim();
+
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    if (tokens.length > 0) {
+      let abbrev = "";
+      for (const token of tokens) {
+        abbrev += token[0];
+        if (abbrev.length >= 3) break;
+      }
+
+      if (abbrev.length < 3) {
+        const joined = tokens.join("");
+        abbrev = (abbrev + joined).slice(0, 3);
+      }
+
+      if (abbrev.length > 0) {
+        return abbrev;
+      }
+    }
+
+    const id = (stopId || "").toUpperCase();
+    const compactId = id.endsWith("N") || id.endsWith("S") ? id.slice(0, -1) : id;
+    return compactId.slice(-3) || "STP";
+  }
+
   private async getArrivalsForStop(
     stopId: string,
     line: string,
@@ -139,6 +255,10 @@ export class RealtimeService {
 
     try {
       const feed = await this.fetchFeed(feedKey);
+
+      const sourceStop = GTFSStopModel.getByIdWithFallback(stopId);
+      const sourceStopName = sourceStop?.stop_name || stopId;
+      const sourceStopAbbrev = this.buildStopAbbrev(sourceStopName, stopId);
 
       const processingStart = Date.now();
       const arrivals: TempArrival[] = [];
@@ -161,14 +281,35 @@ export class RealtimeService {
         const route = GTFSRouteModel.getById(routeId);
         dbLookupTime += Date.now() - dbStart;
 
-        if (!route || route.route_short_name !== line) continue;
+        if (!route) continue;
 
-        if (!this.matchesDirection(tripId, direction)) continue;
+        // Accept either GTFS short name ("A", "1") or route_id when matching line.
+        const requestedLine = line.toUpperCase();
+        const routeShortName = (route.route_short_name || "").toUpperCase();
+        const routeIdUpper = route.route_id.toUpperCase();
+        if (
+          requestedLine !== routeShortName &&
+          requestedLine !== routeIdUpper
+        ) {
+          continue;
+        }
 
         if (!tripUpdate.stop_time_update) continue;
 
         for (const stopTimeUpdate of tripUpdate.stop_time_update) {
-          if (stopTimeUpdate.stop_id !== stopId) continue;
+          if (!this.stopMatches(stopId, stopTimeUpdate.stop_id || "")) {
+            continue;
+          }
+
+          if (
+            !this.matchesDirectionForStop(
+              tripId,
+              direction,
+              stopTimeUpdate.stop_id || "",
+            )
+          ) {
+            continue;
+          }
 
           const arrivalTime = stopTimeUpdate.arrival?.time;
           if (!arrivalTime) continue;
@@ -203,6 +344,8 @@ export class RealtimeService {
             stopId: stopId,
             routeId: route.route_id,
             arrivalTime: new Date(arrivalTimestamp * 1000).toISOString(),
+            sourceStopName,
+            sourceStopAbbrev,
           });
 
           break;
@@ -258,7 +401,7 @@ export class RealtimeService {
     const groupedMap = new Map<string, TransitData>();
 
     for (const arrival of allArrivals) {
-      const key = `${arrival.line}-${arrival.direction}-${arrival.finalStopName}`;
+      const key = `${arrival.line}-${arrival.direction}-${arrival.finalStopName}-${arrival.stopId}`;
 
       if (!groupedMap.has(key)) {
         groupedMap.set(key, {
@@ -268,6 +411,8 @@ export class RealtimeService {
           etas: [],
           stopId: arrival.stopId,
           routeId: arrival.routeId,
+          sourceStopName: arrival.sourceStopName,
+          sourceStopAbbrev: arrival.sourceStopAbbrev,
         });
       }
 

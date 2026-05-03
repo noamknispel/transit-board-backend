@@ -137,6 +137,19 @@ export class GTFSRouteModel {
     return stmt.all() as GTFSRoute[];
   }
 
+  static getRoutesByStop(stopId: string): GTFSRoute[] {
+    // Find routes that serve this stop by joining through trips and stop_times
+    const stmt = db.prepare(`
+      SELECT DISTINCT r.*
+      FROM gtfs_routes r
+      JOIN gtfs_trips t ON r.route_id = t.route_id
+      JOIN gtfs_stop_times st ON t.trip_id = st.trip_id
+      WHERE st.stop_id = ? OR st.stop_id LIKE ?
+      ORDER BY r.route_short_name
+    `);
+    return stmt.all(stopId, `${stopId}%`) as GTFSRoute[];
+  }
+
   static bulkInsert(routes: GTFSRoute[]): void {
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO gtfs_routes (
