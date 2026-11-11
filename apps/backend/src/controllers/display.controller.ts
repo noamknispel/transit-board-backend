@@ -1,0 +1,149 @@
+import { DeviceModel } from "../models/device.js";
+import { getWidgetsData } from "./widget.controller.js";
+import { widgetRegistry } from "../widgets/index.js";
+import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
+import { encodePng } from "../render/png.js";
+import { statusCanvas, type RenderContext } from "../render/layout.js";
+import type { Canvas } from "../render/canvas.js";
+
+// Display geometry and polling cadence. Per-device overrides (and brightness)
+// can move into the devices table later; the wire format already carries them.
+const DISPLAY: RenderContext = {
+  width: Number(process.env.DISPLAY_WIDTH || "128"),
+  height: Number(process.env.DISPLAY_HEIGHT || "32"),
+};
+const POLL_AFTER_SEC = Number(process.env.DISPLAY_POLL_SECONDS || "10");
+// Every frame lives in the microcontroller's RAM (~4 KB each), so cap them.
+const MAX_FRAMES = Math.min(255, Number(process.env.DISPLAY_MAX_FRAMES || "16"));
+const DEFAULT_DURATION_SEC = 5;
+// Collapses bursts (device + dashboard preview) into one render.
+const CACHE_TTL_MS = Number(process.env.DISPLAY_CACHE_MS || "2000");
+
+interface RenderedDisplay {
+  encoded: EncodedDisplay;
+  canvases: Canvas[];
+}
+
+const cache = new Map<string, { at: number; result: Promise<RenderedDisplay> }>();
+
+const jsonResponse = (data: any, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
+  const widgets = await getWidgetsData(deviceId);
+  const frames: EncodedFrame[] = [];
+
+  for (const widget of widgets) {
+    const plugin = widgetRegistry.get(widget.type);
+    if (!plugin) continue;
+    try {
+      const durationSec = widget.duration > 0 ? widget.duration : DEFAULT_DURATION_SEC;
+      for (const canvas of plugin.render(widget.data, DISPLAY)) {
+        frames.push({ canvas, durationSec });
+      }
+    } catch (error) {
+      console.error(`Error rendering widget ${widget.id} (${widget.type}):`, error);
+    }
+  }
+
+  if (frames.length === 0) {
+    frames.push({ canvas: statusCanvas(DISPLAY, "No widgets"), durationSec: 10 });
+  }
+  if (frames.length > MAX_FRAMES) {
+    console.warn(`Device ${deviceId}: ${frames.length} frames, truncating to ${MAX_FRAMES}`);
+    frames.length = MAX_FRAMES;
+  }
+
+  const encoded = encodeDisplay(frames, { ...DISPLAY, pollAfterSec: POLL_AFTER_SEC });
+  return { encoded, canvases: frames.map((f) => f.canvas) };
+}
+
+function getRendered(deviceId: string): Promise<RenderedDisplay> {
+  const now = Date.now();
+  const hit = cache.get(deviceId);
+  if (hit && now - hit.at < CACHE_TTL_MS) return hit.result;
+
+  const result = renderDevice(deviceId);
+  cache.set(deviceId, { at: now, result });
+  // Don't cache failures.
+  result.catch(() => {
+    if (cache.get(deviceId)?.result === result) cache.delete(deviceId);
+  });
+  return result;
+}
+
+/** True when the request's If-None-Match covers `etag`. */
+function etagMatches(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  if (header.trim() === "*") return true;
+  return header
+    .split(",")
+    .map((tag) => tag.trim().replace(/^W\//, ""))
+    .includes(etag);
+}
+
+/**
+ * GET /devices/:deviceId/display
+ *
+ * The one endpoint the microcontroller polls. Returns pre-rendered frames,
+ * durations and settings in a single binary body (see render/encode.ts), or
+ * 304 Not Modified when the device's If-None-Match is still current.
+ */
+export const getDisplay = async (req: Request, deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) return jsonResponse({ error: "Device not found" }, 404);
+
+  try {
+    const { encoded } = await getRendered(deviceId);
+    const headers = { ETag: encoded.etag, "Cache-Control": "no-cache" };
+
+    if (etagMatches(req.headers.get("if-none-match"), encoded.etag)) {
+      return new Response(null, { status: 304, headers });
+    }
+    return new Response(encoded.body, {
+      headers: { ...headers, "Content-Type": "application/octet-stream" },
+    });
+  } catch (error) {
+    console.error("Error building display:", error);
+    return jsonResponse({ error: "Failed to build display" }, 500);
+  }
+};
+
+/**
+ * GET /devices/:deviceId/preview.png?frame=0|all&scale=6
+ *
+ * Exactly what the device is sent, as an upscaled PNG. Handy for debugging
+ * and for a live preview in the dashboard.
+ */
+export const getPreview = async (req: Request, deviceId: string) => {
+  const device = DeviceModel.getById(deviceId);
+  if (!device) return jsonResponse({ error: "Device not found" }, 404);
+
+  try {
+    const url = new URL(req.url);
+    const scale = Math.min(16, Math.max(1, parseInt(url.searchParams.get("scale") || "6", 10) || 6));
+    const frameParam = url.searchParams.get("frame") || "0";
+    const { canvases } = await getRendered(deviceId);
+
+    let selected: Canvas[];
+    if (frameParam === "all") {
+      selected = canvases;
+    } else {
+      const index = parseInt(frameParam, 10);
+      if (!Number.isInteger(index) || index < 0 || index >= canvases.length) {
+        return jsonResponse({ error: `frame must be 0-${canvases.length - 1} or "all"` }, 400);
+      }
+      selected = [canvases[index]!];
+    }
+
+    return new Response(encodePng(selected, scale), {
+      headers: { "Content-Type": "image/png", "Cache-Control": "no-cache" },
+    });
+  } catch (error) {
+    console.error("Error building preview:", error);
+    return jsonResponse({ error: "Failed to build preview" }, 500);
+  }
+};

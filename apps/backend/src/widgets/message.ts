@@ -1,4 +1,6 @@
 import { WidgetPlugin } from "./base.js";
+import { Canvas, parseColor, WHITE } from "../render/canvas.js";
+import { rowCenter, type RenderContext } from "../render/layout.js";
 
 /**
  * Message widget plugin
@@ -47,5 +49,12 @@ export class MessageWidgetPlugin implements WidgetPlugin {
       color: config.color || this.defaultConfig.color,
       scroll: config.scroll || this.defaultConfig.scroll,
     };
+  }
+
+  render(data: any, ctx: RenderContext): Canvas[] {
+    const canvas = new Canvas(ctx.width, ctx.height);
+    const text = String(data.text ?? "").slice(0, 20);
+    canvas.text(text, 2, rowCenter(0), parseColor(data.color, WHITE));
+    return [canvas];
   }
 }

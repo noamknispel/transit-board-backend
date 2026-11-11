@@ -1,6 +1,9 @@
+import type { Canvas } from "../render/canvas.js";
+import type { RenderContext } from "../render/layout.js";
+
 /**
  * Base interface for widget plugins
- * Each widget type implements this interface to provide data
+ * Each widget type implements this interface to provide data and draw it
  */
 export interface WidgetPlugin {
   type: string;
@@ -16,6 +19,15 @@ export interface WidgetPlugin {
    */
   getData(config: any, deviceId: string): Promise<any>;
   
+  /**
+   * Draw this widget's data.
+   * @param data The value returned by getData()
+   * @param ctx Size of the display to draw for
+   * @returns One canvas per "page". Each page is shown for the widget's
+   *          configured duration (e.g. transit pages through its arrivals).
+   */
+  render(data: any, ctx: RenderContext): Canvas[];
+
   /**
    * Validate widget configuration
    * @param config Configuration to validate

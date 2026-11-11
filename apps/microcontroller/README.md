@@ -2,11 +2,13 @@
 
 CircuitPython firmware for the **Adafruit MatrixPortal M4** driving two chained 64×32 RGB LED matrices (128×32 total). Displays rotating widgets (transit arrivals, messages, clock) configured via the web dashboard.
 
+The **backend renders everything**: it draws each widget into pixels and the board just polls `GET /devices/<id>/display`, keeps the returned frames in RAM and rotates through them. The firmware has no widget-specific code, so new widget types and layout changes never require reflashing.
+
 ---
 
 ## Display System
 
-The display shows **widgets** that rotate based on their configured duration. Each widget type has a specialized renderer:
+The display shows **widgets** that rotate based on their configured duration. Each widget type has its own layout (drawn by the backend):
 
 **Transit Widget** — Shows real-time subway arrivals:
 ```
@@ -84,14 +86,16 @@ CIRCUITPY_WIFI_SSID = "YourNetworkName"
 CIRCUITPY_WIFI_PASSWORD = "YourNetworkPassword"
 BACKEND_URL = "http://192.168.x.x:3010"   # Raspberry Pi IP address
 DEVICE_ID = "your-device-uuid-here"        # From dashboard device selector
-POLL_INTERVAL = "30"                        # Seconds between API polls
+POLL_INTERVAL = "10"                        # Fallback only; the backend sets the real poll interval
 ```
 
 **Important:** Use the Raspberry Pi's local IP address (e.g., `192.168.1.100:3010`), not `localhost`.
 
 ### 6. Deploy Code
 
-Copy `code.py` to `/CIRCUITPY/code.py`. The board will reboot automatically and start displaying widgets.
+Copy `code.py` **and `display_protocol.py`** to `/CIRCUITPY/`. The board will reboot automatically and start displaying widgets.
+
+Each poll sends `If-None-Match` with the last payload's `ETag`; when nothing has changed the backend answers `304` and the board does no work. After 3 consecutive failed polls the board shows `No data` instead of leaving stale arrival times up.
 
 ---
 
@@ -145,7 +149,7 @@ You'll see:
 ### WiFi disconnects frequently
 - Move closer to router or use WiFi extender
 - Check for network congestion
-- Increase `POLL_INTERVAL` to reduce network usage
+- Raise `DISPLAY_POLL_SECONDS` on the backend to reduce network usage
 
 ---
 
@@ -154,7 +158,7 @@ You'll see:
 1. Open dashboard: `http://<backend-ip>:3010/dashboard/`
 2. Select device
 3. Add/edit/delete/reorder widgets
-4. Changes appear on next poll cycle (default 30 seconds)
+4. Changes appear on the next poll cycle (default 10 seconds)
 
 No need to reflash the microcontroller!
 
@@ -164,7 +168,9 @@ No need to reflash the microcontroller!
 
 | File | Description |
 |---|---|
-| `code.py` | Main CircuitPython firmware with widget renderers |
+| `code.py` | Main CircuitPython firmware: polls the backend and rotates the returned frames |
+| `display_protocol.py` | Decoder for the backend's `/display` payload (copy next to `code.py`) |
+| `tests/` | Host-side tests for the decoder: `python3 -m unittest discover tests` |
 | `settings.toml` | WiFi and backend configuration |
 | `requirements.txt` | CircuitPython library dependencies |
 | `setup.sh` | Helper script for deploying to `/CIRCUITPY/` |

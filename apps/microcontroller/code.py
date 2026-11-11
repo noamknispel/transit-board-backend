@@ -1,17 +1,19 @@
 # Transit Board — Adafruit MatrixPortal M4
 # Two chained 64x32 RGB matrices (128x32 total)
-# Polls backend API and shows subway arrival times, 2 rows per page.
 #
-# Layout per row (16px tall):
-#   [XX] Destination    2m  8m 15m
+# The backend renders every widget into pixels; this firmware just polls one
+# endpoint, keeps the returned frames in RAM, and rotates through them.
 #
-# Deploy: copy this file + settings.toml to /CIRCUITPY/
+#   GET /devices/<id>/display   (If-None-Match -> 304 when nothing changed)
+#
+# Deploy: copy code.py, display_protocol.py and settings.toml to /CIRCUITPY/
 # Install libs: circup install -r requirements.txt
 
 print("=" * 40)
 print("TRANSIT BOARD STARTING")
 print("=" * 40)
 
+import gc
 import time
 import board
 import displayio
@@ -26,11 +28,20 @@ from adafruit_esp32spi import adafruit_esp32spi_socketpool
 import adafruit_requests
 from adafruit_display_text import label
 
+from display_protocol import read_display, ProtocolError
+
 try:
-    from adafruit_display_shapes.circle import Circle
-    HAS_CIRCLE_SHAPES = True
+    import bitmaptools
+
+    def blit(bitmap, pixels):
+        bitmaptools.arrayblit(bitmap, pixels)
 except ImportError:
-    HAS_CIRCLE_SHAPES = False
+    def blit(bitmap, pixels):
+        i = 0
+        for y in range(HEIGHT):
+            for x in range(WIDTH):
+                bitmap[x, y] = pixels[i]
+                i += 1
 
 # ---------------------------------------------------------------------------
 # Config
@@ -39,36 +50,15 @@ SSID = os.getenv("CIRCUITPY_WIFI_SSID")
 PASSWORD = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://192.168.1.1:3010")
 DEVICE_ID = os.getenv("DEVICE_ID", "")
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
-PAGE_DURATION = int(os.getenv("PAGE_DURATION", "5"))
+# Fallback only: the backend tells us how often to poll in each response.
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "10"))
 RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY", "2"))
+# Consecutive failed polls before we stop showing stale data.
+MAX_FAILURES = 3
 
-# ---------------------------------------------------------------------------
-# MTA Line Colors
-# ---------------------------------------------------------------------------
-LINE_COLORS = {
-    "1": 0xFF0000, "2": 0xFF0000, "3": 0xFF0000,
-    "4": 0x00933C, "5": 0x00933C, "6": 0x00933C,
-    "7": 0xB933AD,
-    "A": 0x0039A6, "C": 0x0039A6, "E": 0x0039A6,
-    "B": 0xFF6319, "D": 0xFF6319, "F": 0xFF6319, "M": 0xFF6319,
-    "G": 0x6CBE45,
-    "J": 0x996633, "Z": 0x996633,
-    "L": 0x8C8C8C,
-    "N": 0xFCCC0A, "Q": 0xFCCC0A, "R": 0xFCCC0A, "W": 0xFCCC0A,
-    "SIR": 0x0039A6,
-}
-DEFAULT_LINE_COLOR = 0x4D5357  # dark gray fallback
-
-# Display dimensions
+# Display dimensions (must match the backend's DISPLAY_WIDTH/HEIGHT)
 WIDTH = 128
 HEIGHT = 32
-ROWS = 2           # rows visible at once
-ROW_HEIGHT = 16    # pixels per row
-BADGE_TEXT_X_OFFSET = 1
-
-# Row Y anchors (top-left corner of each row)
-ROW_Y = [0, 16]
 
 # ---------------------------------------------------------------------------
 # Matrix + Display Init
@@ -107,338 +97,46 @@ except Exception as e:
         time.sleep(1)
 
 # ---------------------------------------------------------------------------
-# Build static display group
+# Display group: one 8-bit indexed bitmap for frames, one label for status
 # ---------------------------------------------------------------------------
+frame_bitmap = displayio.Bitmap(WIDTH, HEIGHT, 256)
+frame_palette = displayio.Palette(256)
+frame_grid = displayio.TileGrid(frame_bitmap, pixel_shader=frame_palette)
+frame_grid.hidden = True
+
+status_label = label.Label(
+    terminalio.FONT,
+    text="",
+    color=0xFFFFFF,
+    anchor_point=(0.0, 0.5),
+    anchored_position=(2, HEIGHT // 4),
+)
+
 root_group = displayio.Group()
-
-# Per-row UI elements — built once, updated each page flip
-line_labels = []   # label — line number/letter
-dest_labels = []   # label — destination text
-eta_labels = []    # label — ETAs
-origin_labels = [] # label — compact origin indicator
-line_circles = []  # circle badges for transit lines
-
-FONT = terminalio.FONT
-
-for row in range(ROWS):
-    y_top = ROW_Y[row]
-    y_center = y_top + ROW_HEIGHT // 2
-
-    # Transit line circle badge (MTA style)
-    if HAS_CIRCLE_SHAPES:
-        line_circle = Circle(
-            x0=8,
-            y0=y_center,
-            r=6,
-            fill=0x000000,
-            outline=0x000000,
-        )
-        root_group.append(line_circle)
-        line_circles.append(line_circle)
-
-    # Line number/letter label (for transit widgets)
-    line_lbl = label.Label(
-        FONT,
-        text="",
-        color=0x000000,
-        x=8 + BADGE_TEXT_X_OFFSET,
-        y=y_center,
-        anchor_point=(0.5, 0.5),
-        anchored_position=(8 + BADGE_TEXT_X_OFFSET, y_center),
-    )
-    root_group.append(line_lbl)
-    line_labels.append(line_lbl)
-
-    # Destination/text label
-    dest_lbl = label.Label(
-        FONT,
-        text="",
-        color=0xFFFFFF,
-        x=20,
-        y=y_center,
-        anchor_point=(0.0, 0.5),
-        anchored_position=(20, y_center),
-    )
-    root_group.append(dest_lbl)
-    dest_labels.append(dest_lbl)
-
-    # ETA label — right-aligned
-    eta_lbl = label.Label(
-        FONT,
-        text="",
-        color=0xFFFF00,
-        x=WIDTH - 2,
-        y=y_center,
-        anchor_point=(1.0, 0.5),
-        anchored_position=(WIDTH - 2, y_center),
-    )
-    root_group.append(eta_lbl)
-    eta_labels.append(eta_lbl)
-
-    # Origin label — right-aligned, drawn before ETA block
-    origin_lbl = label.Label(
-        FONT,
-        text="",
-        color=0x8A8A8A,
-        x=WIDTH - 40,
-        y=y_center,
-        anchor_point=(1.0, 0.5),
-        anchored_position=(WIDTH - 40, y_center),
-    )
-    root_group.append(origin_lbl)
-    origin_labels.append(origin_lbl)
-
+root_group.append(frame_grid)
+root_group.append(status_label)
 display.root_group = root_group
 
-# ---------------------------------------------------------------------------
-# Status helpers
-# ---------------------------------------------------------------------------
+
 def set_status(msg):
-    """Show a single status message on row 0, blank row 1."""
+    """Show a short device-side message (connecting, errors) instead of a frame."""
     print("Status:", msg)
-    hide_line_badge(0)
-    line_labels[0].text = ""
-    dest_labels[0].text = msg[:18]
-    dest_labels[0].color = 0xFFFFFF
-    dest_labels[0].x = 2
-    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
-    eta_labels[0].text = ""
-    origin_labels[0].text = ""
-    clear_row(1)
+    frame_grid.hidden = True
+    status_label.text = msg[:18]
 
 
-def clear_row(row):
-    """Clear all text in a row."""
-    hide_line_badge(row)
-    line_labels[row].text = ""
-    dest_labels[row].text = ""
-    eta_labels[row].text = ""
-    origin_labels[row].text = ""
-
-
-def hide_line_badge(row):
-    """Hide circle badge for non-transit rows/widgets."""
-    if HAS_CIRCLE_SHAPES and row < len(line_circles):
-        line_circles[row].fill = 0x000000
-        line_circles[row].outline = 0x000000
-
-
-def get_transit_routes(widget_data):
-    """Return transit arrival list from backend payload."""
-    return widget_data.get("arrivals", [])
-
-
-def get_transit_page_count(widget_data):
-    """Compute number of pages needed when showing 2 transit rows per page."""
-    routes = get_transit_routes(widget_data)
-    if not routes:
-        return 1
-    return (len(routes) + ROWS - 1) // ROWS
-
-
-def format_line_for_badge(line):
-    """Keep line text compact enough to fit in circle badge."""
-    line_text = str(line).upper()
-    if len(line_text) <= 2:
-        return line_text
-    # Keep common 3-letter lines readable in a tiny badge.
-    if line_text == "SIR":
-        return "SI"
-    return line_text[:2]
-
-
-def get_origin_tag(route):
-    """Return ultra-compact source stop indicator tag, e.g. '-TS'."""
-    source_abbrev = str(route.get("sourceStopAbbrev", "")).strip().upper()
-    if not source_abbrev:
-        stop_id = str(route.get("stopId", "")).strip().upper()
-        if stop_id.endswith("N") or stop_id.endswith("S"):
-            stop_id = stop_id[:-1]
-        source_abbrev = stop_id[-2:] if stop_id else ""
-
-    if not source_abbrev:
-        return ""
-
-    return "-" + source_abbrev[:2]
-
-
-# ---------------------------------------------------------------------------
-# Widget Rendering Functions
-# ---------------------------------------------------------------------------
-
-def render_transit_widget(widget_data, page=0):
-    """
-    TRANSIT WIDGET - 2 Lines
-    Line 0: Line# LastStop    ETAm ETAm
-    Line 1: Line# LastStop    ETAm ETAm
-    """
-    # Backend transit widget returns `arrivals`.
-    routes = get_transit_routes(widget_data)
-    show_origin_initials = bool(widget_data.get("showOriginInitials", False))
-    if not routes:
-        set_status("No trains")
-        return
-
-    page_count = get_transit_page_count(widget_data)
-    page_index = page % page_count
-    start_idx = page_index * ROWS
-    
-    # Render up to 2 routes
-    for row in range(ROWS):
-        route_idx = start_idx + row
-        if route_idx < len(routes):
-            route = routes[route_idx]
-            line = format_line_for_badge(route.get("line", "?"))
-            destination = route.get("finalStopName", "")
-            etas = route.get("etas", [])
-            
-            # MTA-style colored circle + white line text
-            line_color = LINE_COLORS.get(line, DEFAULT_LINE_COLOR)
-            if HAS_CIRCLE_SHAPES and row < len(line_circles):
-                line_circles[row].fill = line_color
-                line_circles[row].outline = line_color
-
-            line_labels[row].text = line[:2]
-            line_labels[row].color = 0xFFFFFF
-
-            eta_text = " ".join([str(e) + "m" for e in etas[:2]]) if etas else ""
-            origin_tag = get_origin_tag(route) if show_origin_initials else ""
-
-            # Place ETA at right edge, then place origin tag just to its left.
-            eta_labels[row].text = eta_text
-            eta_chars = len(eta_text)
-            eta_left_x = (WIDTH - 2) - (eta_chars * 6)
-
-            if origin_tag:
-                origin_labels[row].text = origin_tag
-                origin_labels[row].anchored_position = (eta_left_x - 2, ROW_Y[row] + ROW_HEIGHT // 2)
-            else:
-                origin_labels[row].text = ""
-
-            origin_width_px = len(origin_labels[row].text) * 6
-            origin_left_x = (eta_left_x - 2) - origin_width_px if origin_labels[row].text else eta_left_x
-
-            # Keep destination from colliding with origin/ETA columns.
-            available_px = max(6, origin_left_x - 20 - 2)
-            max_dest_chars = max(1, min(12, available_px // 6))
-            
-            # Destination
-            dest_labels[row].text = destination[:max_dest_chars]
-            dest_labels[row].color = 0xFFFFFF
-            dest_labels[row].x = 20
-            dest_labels[row].anchored_position = (20, ROW_Y[row] + ROW_HEIGHT // 2)
-        else:
-            clear_row(row)
-
-
-def render_message_widget(widget_data):
-    """
-    MESSAGE WIDGET - Text with Color
-    Line 0: Custom text in specified color
-    """
-    text = widget_data.get("text", "")
-    color_hex = widget_data.get("color", "#FFFFFF")
-    
-    # Parse color
-    try:
-        color = int(color_hex.lstrip("#"), 16)
-    except:
-        color = 0xFFFFFF
-
-    hide_line_badge(0)
-    hide_line_badge(1)
-    
-    # Display text with color
-    line_labels[0].text = ""
-    dest_labels[0].text = text[:20]
-    dest_labels[0].color = color
-    dest_labels[0].x = 2
-    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
-    eta_labels[0].text = ""
-    origin_labels[0].text = ""
-    
-    clear_row(1)
-
-
-def render_clock_widget(widget_data):
-    """
-    CLOCK WIDGET - 2 Lines
-    Line 0: Date and Timezone
-    Line 1: Time
-    """
-    time_str = widget_data.get("time", "")
-    date_str = widget_data.get("date", "")
-    timezone = widget_data.get("timezone", "")
-    weather = widget_data.get("weather", {})
-
-    hide_line_badge(0)
-    hide_line_badge(1)
-
-    date_display = (date_str + " " + timezone).strip()
-    
-    # Line 0: Date + Timezone
-    line_labels[0].text = ""
-    dest_labels[0].text = date_display[:20]
-    dest_labels[0].color = 0xFFFFFF
-    dest_labels[0].x = 2
-    dest_labels[0].anchored_position = (2, ROW_Y[0] + ROW_HEIGHT // 2)
-    eta_labels[0].text = ""
-    origin_labels[0].text = ""
-    
-    # Line 1: Time
-    line_labels[1].text = ""
-    weather_str = ""
-    if isinstance(weather, dict):
-      temp = weather.get("temp")
-      unit = str(weather.get("unit", "")).upper()
-      summary = str(weather.get("summary", "")).upper()
-      if temp is not None and unit in ("F", "C"):
-          weather_str = str(temp) + unit
-          if summary:
-              weather_str += " " + summary[:4]
-
-    line2_text = time_str
-    if weather_str:
-        line2_text = (time_str + " " + weather_str).strip()
-
-    dest_labels[1].text = line2_text[:20]
-    dest_labels[1].color = 0xFFFFFF
-    dest_labels[1].x = 2
-    dest_labels[1].anchored_position = (2, ROW_Y[1] + ROW_HEIGHT // 2)
-    eta_labels[1].text = ""
-    origin_labels[1].text = ""
-
-
-def render_widget(widget, reset_transit_page=True):
-    """Route to appropriate widget renderer based on type."""
-    global transit_page
-    global transit_pages
-
-    widget_type = widget.get("type", "")
-    widget_data = widget.get("data", {})
-    
-    print("Rendering widget:", widget_type)
-    
-    if widget_type == "transit":
-        transit_pages = get_transit_page_count(widget_data)
-        if reset_transit_page:
-            transit_page = 0
-        if transit_page >= transit_pages:
-            transit_page = 0
-        render_transit_widget(widget_data, transit_page)
-    elif widget_type == "message":
-        transit_page = 0
-        transit_pages = 1
-        render_message_widget(widget_data)
-    elif widget_type == "clock":
-        transit_page = 0
-        transit_pages = 1
-        render_clock_widget(widget_data)
-    else:
-        transit_page = 0
-        transit_pages = 1
-        print("Unknown widget type:", widget_type)
-        set_status("Unknown type")
+def show_frame(frame):
+    """Copy a decoded frame into the bitmap and push it to the matrix."""
+    _duration, palette, pixels = frame
+    display.auto_refresh = False  # update palette + pixels as one visible change
+    for i in range(len(palette) // 3):
+        j = i * 3
+        frame_palette[i] = (palette[j] << 16) | (palette[j + 1] << 8) | palette[j + 2]
+    blit(frame_bitmap, pixels)
+    status_label.text = ""
+    frame_grid.hidden = False
+    display.refresh()
+    display.auto_refresh = True
 
 
 # ---------------------------------------------------------------------------
@@ -528,23 +226,52 @@ except Exception as e:
     # Keep retrying in the main loop via the poll mechanism
 
 
-def fetch_data():
-    """Fetch widget data from backend. Returns list of widgets or None on error."""
-    url = BACKEND_URL + "/devices/" + DEVICE_ID + "/data"
+NOT_MODIFIED = object()
+
+
+def fetch_display(etag):
+    """
+    Ask the backend for the current display.
+
+    Returns NOT_MODIFIED on a 304, (settings, frames, etag) on a new payload,
+    or None on any error.
+    """
+    global frames
+    url = BACKEND_URL + "/devices/" + DEVICE_ID + "/display"
+    request_headers = {"If-None-Match": etag} if etag else {}
+
     for attempt in range(2):
         print("Fetching:", url, "(attempt", attempt + 1, ")")
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=request_headers, timeout=10)
             print("Response status:", response.status_code)
-            if response.status_code == 200:
-                payload = response.json()
-                widgets = payload.get("widgets", [])
-                print("Received {} widgets".format(len(widgets)))
-                response.close()
-                return widgets
 
-            print("HTTP error:", response.status_code)
+            if response.status_code == 304:
+                response.close()
+                return NOT_MODIFIED
+
+            if response.status_code != 200:
+                print("HTTP error:", response.status_code)
+                response.close()
+                return None
+
+            new_etag = response.headers.get("etag")
+
+            # What's on screen lives in frame_bitmap, so the old frame list is
+            # no longer needed. Free it before buffering the new one.
+            frames = []
+            gc.collect()
+            # If this attempt fails, the retry must be a full download rather
+            # than a 304 that leaves us with nothing to rotate.
+            request_headers = {}
+
+            settings, new_frames = read_display(response.iter_content(chunk_size=1024))
             response.close()
+            print("Received {} frames".format(len(new_frames)))
+            return settings, new_frames, new_etag
+        except ProtocolError as e:
+            # Server spoke something we don't understand; retrying won't help.
+            print("Protocol error:", e)
             return None
         except Exception as e:
             print("Fetch error:", e)
@@ -567,80 +294,67 @@ def fetch_data():
 set_status("Loading...")
 print("Starting main loop")
 
-# State variables
-widgets = []           # widget list
-current_widget = 0     # current widget index
-current_duration = 10  # default duration
-widget_signature = ""  # track widget list changes from backend
-transit_page = 0
-transit_pages = 1
+frames = []            # list of (duration_sec, palette_bytes, pixels)
+frame_index = 0
+etag = None
+poll_interval = POLL_INTERVAL
+failures = 0
 
-last_poll = -POLL_INTERVAL   # force immediate poll on first iteration
+last_poll = None       # None forces an immediate poll on the first iteration
 last_rotation = time.monotonic()
 
 while True:
     now = time.monotonic()
 
     # --- Poll backend ---
-    if (now - last_poll) >= POLL_INTERVAL:
-        print("Polling backend...")
-        result = fetch_data()
+    if last_poll is None or (now - last_poll) >= poll_interval:
+        result = fetch_display(etag)
 
-        if result is not None:
-            new_widgets = result
-
-            if len(new_widgets) == 0:
-                set_status("No widgets")
-                widgets = []
-                current_widget = 0
-                current_duration = 10
-                widget_signature = ""
-            else:
-                new_signature = "|".join([
-                    str(w.get("id", "")) + ":" + str(w.get("type", "")) + ":" + str(w.get("duration", ""))
-                    for w in new_widgets
-                ])
-
-                widgets = new_widgets
-
-                # Keep current widget position unless list/order/duration changed.
-                if current_widget >= len(widgets):
-                    current_widget = 0
-
-                if new_signature != widget_signature:
-                    render_widget(widgets[current_widget], True)
-                    current_duration = widgets[current_widget].get("duration", 10)
-                    last_rotation = now
-                    widget_signature = new_signature
-                else:
-                    # Refresh widget data while preserving transit page position.
-                    render_widget(widgets[current_widget], False)
-                    current_duration = widgets[current_widget].get("duration", current_duration)
+        if result is NOT_MODIFIED:
+            failures = 0
+        elif result is None:
+            etag = None  # force a full download next time
+            failures += 1
+            if failures >= MAX_FAILURES:
+                # Don't leave stale arrival times on the wall.
+                frames = []
+                set_status("No data")
         else:
-            set_status("No data")
-            widgets = []
-            current_widget = 0
-            current_duration = 10
-            widget_signature = ""
-            transit_page = 0
-            transit_pages = 1
+            settings, new_frames, new_etag = result
+            failures = 0
+
+            if settings["width"] != WIDTH or settings["height"] != HEIGHT:
+                frames = []
+                etag = None
+                set_status("Size mismatch")
+            else:
+                had_frames = len(frames) > 0 or not frame_grid.hidden
+                frames = new_frames
+                etag = new_etag
+
+                if settings["poll_after"] > 0:
+                    poll_interval = settings["poll_after"]
+                if settings["brightness"] is not None:
+                    display.brightness = settings["brightness"] / 100
+
+                if frames:
+                    # Keep the current position so a data refresh doesn't
+                    # restart the rotation; only a first load starts the timer.
+                    frame_index = frame_index % len(frames)
+                    show_frame(frames[frame_index])
+                    if not had_frames:
+                        last_rotation = time.monotonic()
+
+        # A reconnect may have replaced the picture with status text.
+        if frames and frame_grid.hidden:
+            show_frame(frames[frame_index])
 
         last_poll = time.monotonic()
 
-    # --- Widget rotation ---
-    elif widgets:
-        if (now - last_rotation) >= current_duration:
-            active_widget = widgets[current_widget]
-            active_type = active_widget.get("type", "")
-
-            if active_type == "transit" and transit_pages > 1 and transit_page < (transit_pages - 1):
-                transit_page += 1
-                render_transit_widget(active_widget.get("data", {}), transit_page)
-            else:
-                current_widget = (current_widget + 1) % len(widgets)
-                render_widget(widgets[current_widget], True)
-                current_duration = widgets[current_widget].get("duration", 10)
-
-            last_rotation = time.monotonic()
+    # --- Frame rotation ---
+    if len(frames) > 1 and (now - last_rotation) >= frames[frame_index][0]:
+        frame_index = (frame_index + 1) % len(frames)
+        show_frame(frames[frame_index])
+        last_rotation = time.monotonic()
 
     time.sleep(0.1)

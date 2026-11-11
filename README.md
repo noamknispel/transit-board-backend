@@ -19,6 +19,7 @@ transit-board-backend/
 - **Real-time Data**: Live MTA subway arrivals via GTFS-RT feeds
 - **Multi-Device Support**: Manage multiple transit boards from one backend
 - **Dynamic Rotation**: Each widget has configurable display duration
+- **Server-Rendered Display**: The backend draws every widget into pixels; the microcontroller just polls one endpoint and shows the frames
 
 ## Quick Start
 
@@ -225,7 +226,9 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - `PUT /widgets/:widgetId` - Update a widget
 - `DELETE /widgets/:widgetId` - Delete a widget
 - `PUT /devices/:deviceId/widgets/reorder` - Reorder widgets
-- `GET /devices/:deviceId/data` - Get widget data with live updates
+- `GET /devices/:deviceId/display` - Pre-rendered frames for the microcontroller (binary; supports `If-None-Match` → `304`)
+- `GET /devices/:deviceId/preview.png?frame=0|all&scale=6` - The same frames as a PNG, for debugging or a dashboard preview
+- `GET /devices/:deviceId/data` - Raw widget data as JSON (legacy; used by the old widget-rendering firmware)
 
 ### Subscriptions (for Transit Widget)
 - `GET /devices/:deviceId/subscriptions` - List subscriptions
@@ -283,7 +286,8 @@ apps/backend/
 │   ├── controllers/          # Request handlers
 │   ├── models/               # Database models
 │   ├── services/             # Business logic (GTFS-RT)
-│   ├── widgets/              # Widget plugin system
+│   ├── widgets/              # Widget plugins (data + rendering)
+│   ├── render/               # Canvas, bitmap font, payload encoder, PNG preview
 │   └── migrations/           # Database migrations
 └── transit.db                # SQLite database
 
@@ -296,19 +300,33 @@ apps/dashboard/
 └── dist/                     # Built files (served by backend)
 
 apps/microcontroller/
-├── code.py                   # Main firmware
+├── code.py                   # Main firmware (poll, rotate frames)
+├── display_protocol.py       # Decoder for the /display payload
+├── tests/                    # Host-side tests for the decoder
 ├── settings.toml             # WiFi + backend config
 └── requirements.txt          # CircuitPython libraries
 ```
 
 ### Adding a New Widget Type
 
-1. Create plugin in `apps/backend/src/widgets/yourwidget.ts`
+The backend draws every widget, so a new type needs no firmware changes.
+
+1. Create plugin in `apps/backend/src/widgets/yourwidget.ts`. It implements
+   `getData()` (fetch whatever you need) and `render()` (draw that data into
+   one or more `Canvas` pages; each page is shown for the widget's duration)
 2. Register in `apps/backend/src/widgets/index.ts`
 3. Add widget type to dashboard form in `AddWidgetModal.tsx`
-4. Add renderer in `apps/microcontroller/code.py`
 
-See existing widgets (transit, message, clock) for examples.
+Use `GET /devices/:deviceId/preview.png?frame=all` to see what your widget
+draws without a board attached. See existing widgets (transit, message, clock)
+for examples.
+
+### Tests
+
+```bash
+cd apps/backend && bun test                                       # renderer + wire format
+cd apps/microcontroller && python3 -m unittest discover tests     # firmware payload decoder
+```
 
 ## License
 

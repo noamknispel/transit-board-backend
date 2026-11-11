@@ -1,5 +1,7 @@
 import { WidgetPlugin } from "./base.js";
 import { WeatherService } from "../services/weather.js";
+import { Canvas, WHITE } from "../render/canvas.js";
+import { rowCenter, type RenderContext } from "../render/layout.js";
 
 /**
  * Clock widget plugin
@@ -145,5 +147,29 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     }
 
     return result;
+  }
+
+  render(data: any, ctx: RenderContext): Canvas[] {
+    const canvas = new Canvas(ctx.width, ctx.height);
+
+    // Row 0: date + timezone
+    const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
+    canvas.text(dateLine.slice(0, 20), 2, rowCenter(0), WHITE);
+
+    // Row 1: time, plus compact weather when available
+    let timeLine = String(data.time ?? "");
+    const weather = data.weather;
+    if (weather && typeof weather === "object" && weather.temp !== undefined) {
+      const unit = String(weather.unit ?? "").toUpperCase();
+      if (unit === "F" || unit === "C") {
+        let w = `${weather.temp}${unit}`;
+        const summary = String(weather.summary ?? "").toUpperCase();
+        if (summary) w += ` ${summary.slice(0, 4)}`;
+        timeLine = `${timeLine} ${w}`.trim();
+      }
+    }
+    canvas.text(timeLine.slice(0, 20), 2, rowCenter(1), WHITE);
+
+    return [canvas];
   }
 }

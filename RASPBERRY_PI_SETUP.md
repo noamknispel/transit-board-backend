@@ -259,8 +259,7 @@ CIRCUITPY_WIFI_SSID = "YourWiFiNetwork"
 CIRCUITPY_WIFI_PASSWORD = "YourWiFiPassword"
 BACKEND_URL = "http://<raspberry-pi-ip>:3010"
 DEVICE_ID = "<device-id>"
-POLL_INTERVAL = "30"
-PAGE_DURATION = "5"
+POLL_INTERVAL = "10"   # fallback; the backend controls the real interval
 ```
 
 ## Troubleshooting

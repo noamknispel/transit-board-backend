@@ -4,7 +4,8 @@ import { router } from "./router";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+  "Access-Control-Expose-Headers": "ETag",
 };
 
 const withCors = async (req: Request): Promise<Response> => {
