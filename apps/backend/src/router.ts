@@ -56,6 +56,7 @@ export const router = async (req: Request): Promise<Response> => {
   // GET /devices/:deviceId/display - Pre-rendered frames for the microcontroller
   const displayMatch = pathname.match(/^\/devices\/([^\/]+)\/display$/);
   if (displayMatch && method === "GET") {
+    console.log("Display request for device:", displayMatch[1]);
     const deviceId = displayMatch[1];
     return displayController.getDisplay(req, deviceId);
   }
