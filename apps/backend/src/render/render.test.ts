@@ -51,6 +51,21 @@ describe("encodeDisplay", () => {
     expect(body.length).toBe(HEADER_LENGTH + 4 + 6 + W * H);
   });
 
+  test("dims the palette but keeps lit channels visible at bit_depth 4", () => {
+    const c = new Canvas(W, H);
+    c.fillRect(0, 0, 1, 1, [255, 100, 0]);
+    const { body, etag } = encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 10 });
+    const palette = Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3));
+    expect(palette).toEqual([26, 16, 0]); // 255 -> 26, 100 -> 10 clamped up to 16, 0 stays off
+    // Pixels are untouched, only the palette changes, and so does the etag.
+    expect(etag).not.toBe(encodeDisplay([{ canvas: c, durationSec: 4 }], settings).etag);
+  });
+
+  test("brightness 0 in the header turns the panel off", () => {
+    const { body } = encodeDisplay([{ canvas: frame(), durationSec: 4 }], { ...settings, brightness: 0 });
+    expect(body[12]).toBe(0);
+  });
+
   test("etag is stable for identical input", () => {
     const a = encodeDisplay([{ canvas: frame(), durationSec: 4 }], settings);
     const b = encodeDisplay([{ canvas: frame(), durationSec: 4 }], settings);

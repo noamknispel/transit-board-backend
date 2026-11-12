@@ -1,4 +1,4 @@
-import { DeviceModel } from "../models/device.js";
+import { DeviceModel, MIN_BRIGHTNESS } from "../models/device.js";
 import { getWidgetsData } from "./widget.controller.js";
 import { widgetRegistry } from "../widgets/index.js";
 import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
@@ -6,8 +6,8 @@ import { encodePng } from "../render/png.js";
 import { statusCanvas, type RenderContext } from "../render/layout.js";
 import type { Canvas } from "../render/canvas.js";
 
-// Display geometry and polling cadence. Per-device overrides (and brightness)
-// can move into the devices table later; the wire format already carries them.
+// Display geometry and polling cadence. Brightness and on/off are per device
+// (devices table) and travel in the same payload.
 const DISPLAY: RenderContext = {
   width: Number(process.env.DISPLAY_WIDTH || "128"),
   height: Number(process.env.DISPLAY_HEIGHT || "32"),
@@ -33,6 +33,7 @@ const jsonResponse = (data: any, status = 200) =>
   });
 
 async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
+  const device = DeviceModel.getById(deviceId);
   const widgets = await getWidgetsData(deviceId);
   const frames: EncodedFrame[] = [];
 
@@ -57,7 +58,13 @@ async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
     frames.length = MAX_FRAMES;
   }
 
-  const encoded = encodeDisplay(frames, { ...DISPLAY, pollAfterSec: POLL_AFTER_SEC });
+  const encoded = encodeDisplay(frames, {
+    ...DISPLAY,
+    pollAfterSec: POLL_AFTER_SEC,
+    // Header brightness switches the panel on/off; the dimming is in the palette.
+    brightness: device?.displayOn === false ? 0 : 100,
+    dimPercent: device?.brightness ?? 100,
+  });
   return { encoded, canvases: frames.map((f) => f.canvas) };
 }
 
@@ -146,4 +153,39 @@ export const getPreview = async (req: Request, deviceId: string) => {
     console.error("Error building preview:", error);
     return jsonResponse({ error: "Failed to build preview" }, 500);
   }
+};
+
+/**
+ * PUT /devices/:deviceId/settings  { brightness?: 5-100, displayOn?: boolean }
+ *
+ * Takes effect on the device's next poll (the payload's ETag changes).
+ */
+export const updateSettings = async (req: Request, deviceId: string) => {
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: "Body must be JSON" }, 400);
+  }
+
+  const update: { brightness?: number; displayOn?: boolean } = {};
+  if (body.brightness !== undefined) {
+    const brightness = Number(body.brightness);
+    if (!Number.isFinite(brightness) || brightness < MIN_BRIGHTNESS || brightness > 100) {
+      return jsonResponse({ error: `brightness must be ${MIN_BRIGHTNESS}-100` }, 400);
+    }
+    update.brightness = Math.round(brightness);
+  }
+  if (body.displayOn !== undefined) {
+    if (typeof body.displayOn !== "boolean") {
+      return jsonResponse({ error: "displayOn must be a boolean" }, 400);
+    }
+    update.displayOn = body.displayOn;
+  }
+
+  const device = DeviceModel.updateDisplaySettings(deviceId, update);
+  if (!device) return jsonResponse({ error: "Device not found" }, 404);
+
+  cache.delete(deviceId);
+  return jsonResponse({ device });
 };

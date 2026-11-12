@@ -6,6 +6,14 @@ export interface Device {
   createdAt: string;
   updatedAt?: string;
   lastSeen?: string | null;
+  /** 5-100 (%) */
+  brightness: number;
+  displayOn: boolean;
+}
+
+export interface DisplaySettingsUpdate {
+  brightness?: number;
+  displayOn?: boolean;
 }
 
 // Widget types

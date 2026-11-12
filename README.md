@@ -221,6 +221,12 @@ session on the Pi while the backend is running.
 - Create and manage multiple transit board devices
 - Each device has unique ID for microcontroller pairing
 
+### Display Controls
+- Turn the board's display on or off
+- Brightness slider (5-100%). The matrix driver can only switch the panel on or off,
+  so the backend dims the colors of the frames it sends instead
+- Changes reach the board on its next poll (about 10 seconds); no USB or reflash needed
+
 ### Widget Types
 
 **Transit Widget**
@@ -257,6 +263,10 @@ session on the Pi while the backend is running.
 - `POST /devices` - Create a new device
   ```json
   { "name": "Living Room Display" }
+  ```
+- `PUT /devices/:deviceId/settings` - Display brightness and power
+  ```json
+  { "brightness": 40, "displayOn": true }
   ```
 
 ### Widgets
@@ -345,7 +355,7 @@ apps/backend/
 │   ├── models/               # Database models
 │   ├── services/             # Business logic (GTFS-RT, serial console reader)
 │   ├── widgets/              # Widget plugins (data + rendering)
-│   ├── render/               # Canvas, bitmap font, payload encoder, PNG preview
+│   ├── render/               # Canvas, bitmap font, weather icons, payload encoder, PNG preview
 │   └── migrations/           # Database migrations
 └── transit.db                # SQLite database
 

@@ -62,6 +62,13 @@ export const router = async (req: Request): Promise<Response> => {
     return displayController.getDisplay(req, deviceId);
   }
 
+  // PUT /devices/:deviceId/settings - Brightness and on/off
+  const settingsMatch = pathname.match(/^\/devices\/([^\/]+)\/settings$/);
+  if (settingsMatch && method === "PUT") {
+    const deviceId = settingsMatch[1];
+    return displayController.updateSettings(req, deviceId);
+  }
+
   // GET /devices/:deviceId/preview.png - Same frames as a PNG, for debugging/dashboard
   const previewMatch = pathname.match(/^\/devices\/([^\/]+)\/preview\.png$/);
   if (previewMatch && method === "GET") {

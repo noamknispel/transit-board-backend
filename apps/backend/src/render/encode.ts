@@ -43,6 +43,21 @@ export interface DisplaySettings {
   pollAfterSec: number;
   /** 0-100, or omit to leave the device's brightness alone. */
   brightness?: number;
+  /**
+   * Scale every palette color to this percentage (default 100). The matrix
+   * driver's own brightness is effectively on/off, so dimming happens here.
+   */
+  dimPercent?: number;
+}
+
+// The firmware drives the matrix at bit_depth=4: a channel below 16 shows
+// as off. Lit channels never dim past that, so dark colors don't vanish.
+const MIN_LIT_CHANNEL = 16;
+
+function dimColor(color: number, percent: number): number {
+  if (percent >= 100) return color;
+  const scale = (c: number) => (c === 0 ? 0 : Math.max(MIN_LIT_CHANNEL, Math.round((c * percent) / 100)));
+  return (scale((color >> 16) & 255) << 16) | (scale((color >> 8) & 255) << 8) | scale(color & 255);
 }
 
 export interface EncodedDisplay {
@@ -126,7 +141,8 @@ export function encodeDisplay(frames: EncodedFrame[], settings: DisplaySettings)
     view.setUint16(off, tenths, true);
     view.setUint16(off + 2, f.palette.length, true);
     off += 4;
-    for (const color of f.palette) {
+    for (const original of f.palette) {
+      const color = dimColor(original, settings.dimPercent ?? 100);
       body[off++] = (color >> 16) & 255;
       body[off++] = (color >> 8) & 255;
       body[off++] = color & 255;

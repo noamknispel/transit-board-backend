@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from './api/client';
-import { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from './types';
+import { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from './types';
 import { DeviceSelector } from './components/DeviceSelector';
 import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
 import { DeviceLogs } from './components/DeviceLogs';
+import { DisplayControls } from './components/DisplayControls';
 
 const LAST_DEVICE_STORAGE_KEY = 'transit-board:last-selected-device-id';
 
@@ -19,6 +20,8 @@ function App() {
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || null;
 
   const getStoredDeviceId = (): string | null => {
     try {
@@ -123,6 +126,18 @@ function App() {
       setError(err instanceof Error ? err.message : 'Failed to create device');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveDisplaySettings = async (update: DisplaySettingsUpdate) => {
+    if (!selectedDeviceId) return;
+
+    try {
+      setError(null);
+      const device = await api.updateDeviceSettings(selectedDeviceId, update);
+      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, ...device } : d)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update display settings');
     }
   };
 
@@ -247,6 +262,10 @@ function App() {
           onSelectDevice={handleSelectDevice}
           onAddDevice={handleAddDevice}
         />
+
+        {selectedDevice && (
+          <DisplayControls device={selectedDevice} onSave={handleSaveDisplaySettings} />
+        )}
 
         {selectedDeviceId && (
           <>

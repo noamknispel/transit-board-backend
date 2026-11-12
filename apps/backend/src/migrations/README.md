@@ -30,6 +30,7 @@ This directory contains SQL migration files that define the database schema.
 ## Existing Migrations
 
 - `001_initial_schema.sql` - Creates stations, devices, and subscriptions tables
+- `004_device_display.sql` - Adds per-device `brightness` and `displayOn`
 
 ## Notes
 

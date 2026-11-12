@@ -1,4 +1,4 @@
-import type { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
+import type { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
 
 // Use relative URLs in production (served by backend), or VITE_API_URL for local dev
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -33,6 +33,14 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ name }),
     });
+  }
+
+  async updateDeviceSettings(deviceId: string, update: DisplaySettingsUpdate): Promise<Device> {
+    const response = await this.request<{ device: Device }>(`/devices/${deviceId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    });
+    return response.device;
   }
 
   // Widget endpoints
