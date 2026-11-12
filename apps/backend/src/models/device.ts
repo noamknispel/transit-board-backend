@@ -1,4 +1,5 @@
 import db from "../db/index";
+import type { OffWindow } from "../services/schedule.js";
 
 export interface Device {
   id: string;
@@ -6,11 +7,8 @@ export interface Device {
   /** 5-100 (%); the backend dims the frames it sends. */
   brightness: number;
   displayOn: boolean;
-  scheduleEnabled: boolean;
-  /** "HH:MM", 24h, in scheduleTimezone */
-  scheduleOn: string;
-  scheduleOff: string;
-  scheduleTimezone: string;
+  /** The display is off inside any enabled one of these windows. */
+  offSchedule: OffWindow[];
   createdAt: string;
   updatedAt: string;
 }
@@ -18,19 +16,16 @@ export interface Device {
 export interface DisplaySettingsUpdate {
   brightness?: number;
   displayOn?: boolean;
-  scheduleEnabled?: boolean;
-  scheduleOn?: string;
-  scheduleOff?: string;
-  scheduleTimezone?: string;
+  offSchedule?: OffWindow[];
 }
 
 export const MIN_BRIGHTNESS = 5;
 
-// SQLite stores booleans as 0/1.
+// SQLite stores booleans as 0/1 and the schedule as JSON.
 const fromRow = (row: any): Device => ({
   ...row,
   displayOn: row.displayOn !== 0,
-  scheduleEnabled: row.scheduleEnabled === 1,
+  offSchedule: JSON.parse(row.offSchedule || "[]"),
 });
 
 export class DeviceModel {
@@ -51,17 +46,8 @@ export class DeviceModel {
 
     const next = { ...device, ...update };
     db.prepare(
-      `UPDATE devices SET brightness = ?, displayOn = ?, scheduleEnabled = ?, scheduleOn = ?,
-         scheduleOff = ?, scheduleTimezone = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`
-    ).run(
-      next.brightness,
-      next.displayOn ? 1 : 0,
-      next.scheduleEnabled ? 1 : 0,
-      next.scheduleOn,
-      next.scheduleOff,
-      next.scheduleTimezone,
-      id,
-    );
+      "UPDATE devices SET brightness = ?, displayOn = ?, offSchedule = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(next.brightness, next.displayOn ? 1 : 0, JSON.stringify(next.offSchedule), id);
     return this.getById(id);
   }
 

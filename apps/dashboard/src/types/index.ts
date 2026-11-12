@@ -1,3 +1,18 @@
+/** A daily time window. An end earlier than the start runs past midnight; equal start and end is all day. */
+export interface TimeWindow {
+  /** "HH:MM", 24h */
+  start: string;
+  end: string;
+  timezone: string;
+  /** 0 = Sunday … 6 = Saturday; empty means every day */
+  days?: number[];
+}
+
+/** A display off time; disabled ones stay saved but don't apply */
+export interface OffWindow extends TimeWindow {
+  enabled: boolean;
+}
+
 // Device types
 export interface Device {
   id: string;
@@ -10,36 +25,23 @@ export interface Device {
   brightness: number;
   /** Power switch */
   displayOn: boolean;
-  scheduleEnabled: boolean;
-  /** "HH:MM", 24h, in scheduleTimezone */
-  scheduleOn: string;
-  scheduleOff: string;
-  scheduleTimezone: string;
+  /** The display is off inside any enabled one of these */
+  offSchedule: OffWindow[];
   /** Power switch and schedule combined: whether the panel is lit right now */
   isOn: boolean;
+  /** Index of the off window in effect right now, or null */
+  offBy: number | null;
 }
 
 export interface DisplaySettingsUpdate {
   brightness?: number;
   displayOn?: boolean;
-  scheduleEnabled?: boolean;
-  scheduleOn?: string;
-  scheduleOff?: string;
-  scheduleTimezone?: string;
+  offSchedule?: OffWindow[];
 }
 
 // Widget types
 export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown';
 
-/** When a widget is shown. An end earlier than the start runs past midnight. */
-export interface WidgetSchedule {
-  /** "HH:MM", 24h */
-  start: string;
-  end: string;
-  timezone: string;
-  /** 0 = Sunday … 6 = Saturday; empty means every day */
-  days?: number[];
-}
 
 export interface BaseWidget {
   id: number;
@@ -51,7 +53,7 @@ export interface BaseWidget {
   /** While this widget is visible, the board shows only show-only widgets */
   showOnly: boolean;
   /** null = always on; scheduled widgets replace always-on ones during their window */
-  schedule: WidgetSchedule | null;
+  schedule: TimeWindow | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,7 +116,7 @@ export interface CreateWidgetRequest {
   duration?: number;
   enabled?: boolean;
   showOnly?: boolean;
-  schedule?: WidgetSchedule | null;
+  schedule?: TimeWindow | null;
 }
 
 export interface UpdateWidgetRequest {
@@ -122,7 +124,7 @@ export interface UpdateWidgetRequest {
   duration?: number;
   enabled?: boolean;
   showOnly?: boolean;
-  schedule?: WidgetSchedule | null;
+  schedule?: TimeWindow | null;
 }
 
 // Subscription types

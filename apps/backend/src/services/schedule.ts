@@ -79,21 +79,30 @@ export function validateWindow(window: any): string | null {
   return null;
 }
 
-/** Whether the schedule allows the display to be on at `now`. */
-export function scheduleAllowsOn(device: Device, now = new Date()): boolean {
-  if (!device.scheduleEnabled) return true;
-  return isInWindow(
-    { start: device.scheduleOn, end: device.scheduleOff, timezone: device.scheduleTimezone },
-    now,
-  );
+/** A display off time; disabled ones stay saved but don't apply. */
+export interface OffWindow extends TimeWindow {
+  enabled: boolean;
 }
 
-/** The power switch and the schedule together. */
+/** The enabled off window the display is in at `now`, or null when none applies. */
+export function activeOffWindow(device: Device, now = new Date()): OffWindow | null {
+  return device.offSchedule.find((window) => window.enabled && isInWindow(window, now)) ?? null;
+}
+
+/** The power switch and the off schedule together. */
 export function isDisplayOn(device: Device, now = new Date()): boolean {
-  return device.displayOn && scheduleAllowsOn(device, now);
+  return device.displayOn && !activeOffWindow(device, now);
 }
 
-/** Device as the API returns it: stored settings plus the current on/off state. */
+/**
+ * Device as the API returns it: stored settings plus the current state.
+ * `offBy` is the index of the off window currently in effect, if any.
+ */
 export function withDisplayState(device: Device, now = new Date()) {
-  return { ...device, isOn: isDisplayOn(device, now) };
+  const window = activeOffWindow(device, now);
+  return {
+    ...device,
+    isOn: device.displayOn && !window,
+    offBy: window ? device.offSchedule.indexOf(window) : null,
+  };
 }

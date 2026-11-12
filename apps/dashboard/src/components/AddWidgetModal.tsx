@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetSchedule, WidgetType } from '../types';
-import { browserTimezone, DAY_LETTERS, describeSchedule, toLocalInput } from '../schedule';
+import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, TimeWindow, WidgetType } from '../types';
+import { browserTimezone, describeSchedule, toLocalInput } from '../schedule';
+import { TimeWindowFields } from './TimeWindowFields';
 
 
 const FALLBACK_TIMEZONES = [
@@ -321,7 +322,7 @@ export function AddWidgetModal({
     }
   };
 
-  const buildSchedule = (): WidgetSchedule | null => {
+  const buildSchedule = (): TimeWindow | null => {
     if (!scheduleEnabled) return null;
     return {
       start: scheduleStart,
@@ -330,10 +331,6 @@ export function AddWidgetModal({
       timezone: editWidget?.schedule?.timezone ?? browserTimezone,
       days: scheduleDays,
     };
-  };
-
-  const toggleScheduleDay = (day: number) => {
-    setScheduleDays((days) => (days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort()));
   };
 
   const validateCurrentStep = () => {
@@ -777,32 +774,17 @@ export function AddWidgetModal({
                 </label>
                 {scheduleEnabled && (
                   <div className="mt-3 space-y-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {DAY_LETTERS.map((letter, day) => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => toggleScheduleDay(day)}
-                          className={`h-8 w-8 rounded-full text-xs font-semibold ${
-                            scheduleDays.includes(day)
-                              ? 'bg-accent-cyan/25 text-accent-cyan'
-                              : 'bg-ops-800 text-ops-300 hover:bg-ops-700'
-                          }`}
-                        >
-                          {letter}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="tb-label">From</label>
-                        <input type="time" value={scheduleStart} onChange={(e) => setScheduleStart(e.target.value)} className="tb-input" />
-                      </div>
-                      <div>
-                        <label className="tb-label">Until</label>
-                        <input type="time" value={scheduleEnd} onChange={(e) => setScheduleEnd(e.target.value)} className="tb-input" />
-                      </div>
-                    </div>
+                    <TimeWindowFields
+                      idPrefix="widget-schedule"
+                      days={scheduleDays}
+                      start={scheduleStart}
+                      end={scheduleEnd}
+                      onChange={(update) => {
+                        if (update.days !== undefined) setScheduleDays(update.days);
+                        if (update.start !== undefined) setScheduleStart(update.start);
+                        if (update.end !== undefined) setScheduleEnd(update.end);
+                      }}
+                    />
                     <p className="text-xs text-ops-300">
                       No days selected means every day. An end time earlier than the start runs overnight;
                       the same start and end means all day. Inside its window this widget joins the

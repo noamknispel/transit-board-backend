@@ -225,9 +225,10 @@ session on the Pi while the backend is running.
 - Turn the board's display on or off
 - Brightness slider (5-100%). The matrix driver can only switch the panel on or off,
   so the backend dims the colors of the frames it sends instead
-- Daily schedule: on and off times in a chosen timezone (an off time earlier than the
-  on time runs overnight). The power switch still wins: when it's off, the schedule
-  can't turn the display on
+- Off times: any number of windows when the display turns off, each with its own days
+  and hours and its own enable switch (e.g. every night 23:00–07:00, weekdays
+  09:00–17:00 while you're out, all day Friday). An end earlier than the start runs
+  overnight; the same start and end means all day. The power switch still wins
 - Changes reach the board on its next poll (about 10 seconds); no USB or reflash needed
 
 ### Widget Types
@@ -277,18 +278,19 @@ session on the Pi while the backend is running.
   ```json
   { "name": "Living Room Display" }
   ```
-- `PUT /devices/:deviceId/settings` - Display brightness, power and schedule (all fields optional)
+- `PUT /devices/:deviceId/settings` - Display brightness, power and off times (all fields optional)
   ```json
   {
     "brightness": 40,
     "displayOn": true,
-    "scheduleEnabled": true,
-    "scheduleOn": "07:00",
-    "scheduleOff": "23:00",
-    "scheduleTimezone": "America/New_York"
+    "offSchedule": [
+      { "start": "23:00", "end": "07:00", "timezone": "America/New_York", "days": [], "enabled": true },
+      { "start": "09:00", "end": "17:00", "timezone": "America/New_York", "days": [1, 2, 3, 4, 5], "enabled": false }
+    ]
   }
   ```
-  Device responses include `isOn`: whether the display is lit right now (power switch and schedule combined).
+  `days` uses 0 = Sunday … 6 = Saturday (empty = every day). Device responses include `isOn`
+  (whether the display is lit right now) and `offBy` (index of the off time in effect, or null).
 
 ### Widgets
 - `GET /devices/:deviceId/widgets` - List widgets for a device

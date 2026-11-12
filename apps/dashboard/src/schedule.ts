@@ -1,4 +1,4 @@
-import type { WidgetSchedule } from './types';
+import type { TimeWindow } from './types';
 
 export const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -12,7 +12,7 @@ export const browserTimezone = (() => {
 })();
 
 /** "Mon–Fri 07:00–09:00", "Every day 18:00–02:00", "Sat all day" */
-export function describeSchedule(schedule: WidgetSchedule): string {
+export function describeSchedule(schedule: TimeWindow): string {
   const days = [...(schedule.days ?? [])].sort();
   let dayText = 'Every day';
   if (days.length > 0 && days.length < 7) {

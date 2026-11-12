@@ -34,6 +34,7 @@ This directory contains SQL migration files that define the database schema.
 - `005_display_schedule.sql` - Adds the daily on/off schedule (`scheduleEnabled`, `scheduleOn`, `scheduleOff`, `scheduleTimezone`)
 - `006_widget_show_only.sql` - Adds `showOnly` to widgets
 - `007_widget_schedule.sql` - Adds an optional `schedule` (JSON time window) to widgets
+- `008_display_off_schedule.sql` - Replaces the single display schedule with a list of off windows (`offSchedule`)
 
 ## Notes
 

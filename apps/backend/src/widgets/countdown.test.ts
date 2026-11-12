@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CountdownWidgetPlugin, formatCountdown } from "./countdown.js";
-import { pickDisplayed } from "../controllers/widget.controller.js";
+import { pickDisplayed } from "./select.js";
 
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
 const HOUR = 3600;

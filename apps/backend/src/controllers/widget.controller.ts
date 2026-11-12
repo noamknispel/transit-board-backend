@@ -2,6 +2,7 @@ import { WidgetModel, type WidgetInput } from "../models/widget.js";
 import { DeviceModel } from "../models/device.js";
 import { isInWindow, validateWindow, withDisplayState, type TimeWindow } from "../services/schedule.js";
 import { getWidgetData, validateWidgetConfig, widgetRegistry } from "../widgets/index.js";
+import { pickDisplayed } from "../widgets/select.js";
 
 const jsonResponse = (data: any, status = 200) => {
   return new Response(JSON.stringify(data), {
@@ -238,14 +239,4 @@ export async function getWidgetsData(deviceId: string) {
 
   // Drop widgets that failed to load or have nothing to show
   return pickDisplayed(widgetsWithData.filter((w) => w !== null));
-}
-
-/**
- * Which visible widgets get the board. Always-on widgets and scheduled ones
- * inside their window (out-of-window ones are already gone) rotate together;
- * show-only widgets take over while any of them is visible.
- */
-export function pickDisplayed<T extends { showOnly: boolean }>(visible: T[]): T[] {
-  const showOnly = visible.filter((w) => w.showOnly);
-  return showOnly.length > 0 ? showOnly : visible;
 }

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Device, DisplaySettingsUpdate } from '../types';
+import { Device, DisplaySettingsUpdate, OffWindow } from '../types';
+import { browserTimezone, describeSchedule } from '../schedule';
+import { TimeWindowFields } from './TimeWindowFields';
 
 const MIN_BRIGHTNESS = 5;
 
-const browserTimezone = (() => {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch {
-    return null;
-  }
-})();
+const NEW_OFF_WINDOW: Omit<OffWindow, 'timezone'> = {
+  start: '09:00',
+  end: '17:00',
+  days: [1, 2, 3, 4, 5],
+  enabled: true,
+};
 
 interface DisplayControlsProps {
   device: Device;
@@ -19,15 +20,13 @@ interface DisplayControlsProps {
 export function DisplayControls({ device, onSave }: DisplayControlsProps) {
   // Local values so dragging/typing stays smooth; saved when the edit is done.
   const [brightness, setBrightness] = useState(device.brightness);
-  const [scheduleOn, setScheduleOn] = useState(device.scheduleOn);
-  const [scheduleOff, setScheduleOff] = useState(device.scheduleOff);
+  const [offWindows, setOffWindows] = useState<OffWindow[]>(device.offSchedule);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setBrightness(device.brightness);
-    setScheduleOn(device.scheduleOn);
-    setScheduleOff(device.scheduleOff);
-  }, [device.id, device.brightness, device.scheduleOn, device.scheduleOff]);
+    setOffWindows(device.offSchedule);
+  }, [device.id, device.brightness, device.offSchedule]);
 
   const save = async (update: DisplaySettingsUpdate) => {
     setSaving(true);
@@ -42,17 +41,28 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
     if (brightness !== device.brightness) save({ brightness });
   };
 
-  const commitTime = (key: 'scheduleOn' | 'scheduleOff', value: string) => {
-    if (value && value !== device[key]) save({ [key]: value });
+  const saveOffWindows = (next: OffWindow[]) => {
+    setOffWindows(next);
+    save({ offSchedule: next });
   };
 
+  // Edit one window locally; `commit` saves the whole list.
+  const editWindow = (index: number, update: Partial<OffWindow>, commit: boolean) => {
+    const next = offWindows.map((w, i) => (i === index ? { ...w, ...update } : w));
+    if (commit) saveOffWindows(next);
+    else setOffWindows(next);
+  };
+
+  const commitTimes = () => {
+    if (JSON.stringify(offWindows) !== JSON.stringify(device.offSchedule)) saveOffWindows(offWindows);
+  };
+
+  const activeOff = device.offBy !== null ? device.offSchedule[device.offBy] : null;
   const statusText = !device.displayOn
     ? 'Display off'
     : device.isOn
-      ? device.scheduleEnabled
-        ? `Display on until ${device.scheduleOff}`
-        : 'Display on'
-      : `Off by schedule until ${device.scheduleOn}`;
+      ? 'Display on'
+      : `Off by schedule${activeOff ? ` (${describeSchedule(activeOff)})` : ''}`;
 
   return (
     <div className="tb-panel mb-6 p-5 md:p-6">
@@ -99,59 +109,75 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
       </div>
 
       <div className="mt-5 border-t border-ops-700/70 pt-4">
-        <label className="tb-check-label">
-          <input
-            type="checkbox"
-            className="tb-checkbox"
-            checked={device.scheduleEnabled}
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-display text-lg text-ops-100">Off times</h3>
+            <p className="text-xs text-ops-300">
+              The display turns off inside any enabled off time. No days selected means every day; an
+              end earlier than the start runs overnight; the same start and end means all day.
+            </p>
+          </div>
+          <button
+            type="button"
             disabled={saving}
-            onChange={(e) => save({ scheduleEnabled: e.target.checked })}
-          />
-          Turn on and off on a schedule
-        </label>
+            onClick={() => saveOffWindows([...offWindows, { ...NEW_OFF_WINDOW, timezone: browserTimezone }])}
+            className="tb-btn-secondary shrink-0"
+          >
+            + Add off time
+          </button>
+        </div>
 
-        {device.scheduleEnabled && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="schedule-on" className="tb-label">On at</label>
-              <input
-                id="schedule-on"
-                type="time"
-                className="tb-input"
-                value={scheduleOn}
-                disabled={saving}
-                onChange={(e) => setScheduleOn(e.target.value)}
-                onBlur={() => commitTime('scheduleOn', scheduleOn)}
-              />
-            </div>
-            <div>
-              <label htmlFor="schedule-off" className="tb-label">Off at</label>
-              <input
-                id="schedule-off"
-                type="time"
-                className="tb-input"
-                value={scheduleOff}
-                disabled={saving}
-                onChange={(e) => setScheduleOff(e.target.value)}
-                onBlur={() => commitTime('scheduleOff', scheduleOff)}
-              />
-            </div>
-            <p className="text-xs text-ops-300 sm:col-span-2">
-              Times are in {device.scheduleTimezone.replace(/_/g, ' ')}. An off time earlier than the
-              on time runs overnight.
-              {browserTimezone && browserTimezone !== device.scheduleTimezone && (
-                <>
-                  {' '}
+        {offWindows.length === 0 ? (
+          <p className="text-sm text-ops-300">No off times. The display stays on unless you turn it off.</p>
+        ) : (
+          <div className="space-y-3">
+            {offWindows.map((window, index) => (
+              <div
+                key={index}
+                className={`rounded-lg border p-3 ${
+                  device.offBy === index ? 'border-accent-amber/70 bg-accent-amber/5' : 'border-ops-700/70 bg-ops-950/40'
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <label className="tb-check-label">
+                    <input
+                      type="checkbox"
+                      className="tb-checkbox"
+                      checked={window.enabled}
+                      disabled={saving}
+                      onChange={(e) => editWindow(index, { enabled: e.target.checked }, true)}
+                    />
+                    <span className={window.enabled ? '' : 'text-ops-400'}>
+                      {describeSchedule(window)}
+                      {device.offBy === index && <span className="ml-2 text-xs text-accent-amber">in effect</span>}
+                    </span>
+                  </label>
                   <button
                     type="button"
-                    className="text-accent-cyan underline"
-                    onClick={() => save({ scheduleTimezone: browserTimezone })}
+                    disabled={saving}
+                    onClick={() => saveOffWindows(offWindows.filter((_, i) => i !== index))}
+                    className="tb-btn-danger"
                   >
-                    Use {browserTimezone.replace(/_/g, ' ')}
+                    Delete
                   </button>
-                </>
-              )}
-            </p>
+                </div>
+                <div className={window.enabled ? '' : 'opacity-60'}>
+                  <TimeWindowFields
+                    idPrefix={`off-${index}`}
+                    days={window.days ?? []}
+                    start={window.start}
+                    end={window.end}
+                    disabled={saving}
+                    // Day toggles save right away; times save when the input loses focus.
+                    onChange={(update) => editWindow(index, update, update.days !== undefined)}
+                    onTimeBlur={commitTimes}
+                  />
+                </div>
+                {window.timezone !== browserTimezone && (
+                  <p className="mt-2 text-xs text-ops-300">Times are in {window.timezone.replace(/_/g, ' ')}.</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

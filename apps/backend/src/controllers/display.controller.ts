@@ -1,5 +1,5 @@
 import { DeviceModel, MIN_BRIGHTNESS, type DisplaySettingsUpdate } from "../models/device.js";
-import { isDisplayOn, isValidTimezone, TIME_PATTERN, withDisplayState } from "../services/schedule.js";
+import { isDisplayOn, validateWindow, withDisplayState } from "../services/schedule.js";
 import { getWidgetsData } from "./widget.controller.js";
 import { widgetRegistry } from "../widgets/index.js";
 import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
@@ -13,6 +13,7 @@ const DISPLAY: RenderContext = {
   width: Number(process.env.DISPLAY_WIDTH || "128"),
   height: Number(process.env.DISPLAY_HEIGHT || "32"),
 };
+const MAX_OFF_WINDOWS = 20;
 const POLL_AFTER_SEC = Number(process.env.DISPLAY_POLL_SECONDS || "10");
 // Every frame lives in the microcontroller's RAM (~4 KB each), so cap them.
 const MAX_FRAMES = Math.min(255, Number(process.env.DISPLAY_MAX_FRAMES || "16"));
@@ -158,8 +159,8 @@ export const getPreview = async (req: Request, deviceId: string) => {
 
 /**
  * PUT /devices/:deviceId/settings
- *   { brightness?: 5-100, displayOn?: boolean, scheduleEnabled?: boolean,
- *     scheduleOn?: "HH:MM", scheduleOff?: "HH:MM", scheduleTimezone?: IANA name }
+ *   { brightness?: 5-100, displayOn?: boolean,
+ *     offSchedule?: [{ start: "HH:MM", end: "HH:MM", timezone, days?: [0-6], enabled?: boolean }] }
  *
  * Takes effect on the device's next poll (the payload's ETag changes).
  */
@@ -185,25 +186,23 @@ export const updateSettings = async (req: Request, deviceId: string) => {
     }
     update.displayOn = body.displayOn;
   }
-  if (body.scheduleEnabled !== undefined) {
-    if (typeof body.scheduleEnabled !== "boolean") {
-      return jsonResponse({ error: "scheduleEnabled must be a boolean" }, 400);
+  if (body.offSchedule !== undefined) {
+    if (!Array.isArray(body.offSchedule) || body.offSchedule.length > MAX_OFF_WINDOWS) {
+      return jsonResponse({ error: `offSchedule must be a list of up to ${MAX_OFF_WINDOWS} windows` }, 400);
     }
-    update.scheduleEnabled = body.scheduleEnabled;
-  }
-  for (const key of ["scheduleOn", "scheduleOff"] as const) {
-    if (body[key] !== undefined) {
-      if (typeof body[key] !== "string" || !TIME_PATTERN.test(body[key])) {
-        return jsonResponse({ error: `${key} must be HH:MM (24h)` }, 400);
-      }
-      update[key] = body[key];
+    for (const [i, window] of body.offSchedule.entries()) {
+      const error =
+        validateWindow(window) ??
+        (window.enabled !== undefined && typeof window.enabled !== "boolean" ? "enabled must be a boolean" : null);
+      if (error) return jsonResponse({ error: `offSchedule[${i}]: ${error}` }, 400);
     }
-  }
-  if (body.scheduleTimezone !== undefined) {
-    if (typeof body.scheduleTimezone !== "string" || !isValidTimezone(body.scheduleTimezone)) {
-      return jsonResponse({ error: "scheduleTimezone must be an IANA timezone, e.g. America/New_York" }, 400);
-    }
-    update.scheduleTimezone = body.scheduleTimezone;
+    update.offSchedule = body.offSchedule.map((w: any) => ({
+      start: w.start,
+      end: w.end,
+      timezone: w.timezone,
+      days: w.days ?? [],
+      enabled: w.enabled ?? true,
+    }));
   }
 
   const device = DeviceModel.updateDisplaySettings(deviceId, update);
