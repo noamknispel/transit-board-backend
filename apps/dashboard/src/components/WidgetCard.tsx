@@ -96,7 +96,10 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
               <span className="rounded bg-ops-900 px-2 py-1">Duration: {widget.duration}s</span>
               <span className="rounded bg-ops-900 px-2 py-1">Order: {widget.displayOrder + 1}</span>
               {widget.schedule && (
-                <span className="rounded bg-accent-cyan/15 px-2 py-1 text-accent-cyan">
+                <span
+                  className={`rounded px-2 py-1 ${widget.showOnly ? 'bg-ops-900 text-ops-400 line-through' : 'bg-accent-cyan/15 text-accent-cyan'}`}
+                  title={widget.showOnly ? 'Ignored while show only is on' : undefined}
+                >
                   {describeSchedule(widget.schedule)}
                 </span>
               )}
@@ -119,7 +122,7 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
           </button>
           <button
             onClick={() => onUpdate(widget.id, { showOnly: !widget.showOnly })}
-            title="While this widget is showing, hide every widget that isn't show-only"
+            title="Show this widget now, even outside its schedule, and hide every widget that isn't show only"
             className={`rounded px-3 py-1.5 text-xs font-semibold ${
               widget.showOnly
                 ? 'bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30'

@@ -48,13 +48,6 @@ describe("display off schedule", () => {
     expect(withDisplayState(board, thu("18:00")).offBy).toBeNull();
   });
 
-  test("an active show-only widget overrides off times, but not the power switch", () => {
-    expect(isDisplayOn(board, fri("18:00"), true)).toBe(true);
-    expect(withDisplayState(board, fri("18:00"), true).showOnlyOverride).toBe(true);
-    expect(withDisplayState(board, thu("18:00"), true).showOnlyOverride).toBe(false); // nothing to override
-    expect(isDisplayOn({ ...board, displayOn: false }, fri("18:00"), true)).toBe(false);
-  });
-
   test("power switch wins; an empty schedule never turns it off", () => {
     expect(isDisplayOn(device({ displayOn: false }), thu("12:00"))).toBe(false);
     expect(activeOffWindow(device(), thu("03:00"))).toBeNull();

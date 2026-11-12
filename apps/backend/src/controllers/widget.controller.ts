@@ -1,4 +1,4 @@
-import { WidgetModel, type Widget, type WidgetInput } from "../models/widget.js";
+import { WidgetModel, type WidgetInput } from "../models/widget.js";
 import { DeviceModel } from "../models/device.js";
 import { isInWindow, validateWindow, withDisplayState, type TimeWindow } from "../services/schedule.js";
 import { getWidgetData, validateWidgetConfig, widgetRegistry } from "../widgets/index.js";
@@ -17,9 +17,7 @@ const jsonResponse = (data: any, status = 200) => {
 export const listDevices = async () => {
   try {
     const now = new Date();
-    const devices = await Promise.all(
-      DeviceModel.getAll().map(async (device) => withDisplayState(device, now, await hasActiveShowOnly(device.id))),
-    );
+    const devices = DeviceModel.getAll().map((device) => withDisplayState(device, now));
     return jsonResponse({ devices });
   } catch (error) {
     console.error("Error listing devices:", error);
@@ -212,27 +210,15 @@ export const reorderWidgets = async (req: Request, deviceId: string) => {
  */
 export async function getWidgetsData(deviceId: string) {
   const widgets = WidgetModel.getByDeviceId(deviceId, true); // enabled only
-  return pickDisplayed(await loadVisibleWidgets(widgets, deviceId, new Date()));
-}
-
-/**
- * Whether a show-only widget is showing right now, which keeps the display on
- * through its off times. Only loads the show-only widgets' data.
- */
-export async function hasActiveShowOnly(deviceId: string): Promise<boolean> {
-  const showOnly = WidgetModel.getByDeviceId(deviceId, true).filter((w) => w.showOnly === 1);
-  if (showOnly.length === 0) return false;
-  return (await loadVisibleWidgets(showOnly, deviceId, new Date())).length > 0;
-}
-
-/** Load each widget's data, dropping ones that are out of schedule, failed, or have nothing to show. */
-async function loadVisibleWidgets(widgets: Widget[], deviceId: string, now: Date) {
+  const now = new Date();
+  
   const widgetsWithData = await Promise.all(
     widgets.map(async (widget) => {
       const config = JSON.parse(widget.config);
       const schedule: TimeWindow | null = widget.schedule ? JSON.parse(widget.schedule) : null;
-      // Outside its window a scheduled widget isn't shown (or even fetched).
-      if (schedule && !isInWindow(schedule, now)) return null;
+      // Outside its window a scheduled widget isn't shown (or even fetched),
+      // unless it's show-only: show-only forces it onto the board regardless.
+      if (schedule && widget.showOnly !== 1 && !isInWindow(schedule, now)) return null;
       try {
         const data = await getWidgetData(widget.type, config, deviceId);
         // e.g. a finished timer: enabled, but nothing to show
@@ -252,5 +238,6 @@ async function loadVisibleWidgets(widgets: Widget[], deviceId: string, now: Date
     })
   );
 
-  return widgetsWithData.filter((w) => w !== null);
+  // Drop widgets that failed to load or have nothing to show
+  return pickDisplayed(widgetsWithData.filter((w) => w !== null));
 }

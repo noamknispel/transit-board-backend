@@ -756,11 +756,11 @@ export function AddWidgetModal({
                     checked={showOnly}
                     onChange={(e) => setShowOnly(e.target.checked)}
                   />
-                  Show only this widget while it's active
+                  Show only this widget
                 </label>
                 <p className="mt-1 text-xs text-ops-300">
-                  Hides the other widgets, and keeps the display on through its off times, until this one
-                  is disabled{widgetType === 'countdown' ? ' or the date passes' : ''}.
+                  Puts this widget on the board right away, even outside its schedule, and hides the others
+                  until show only is turned off or the widget is disabled{widgetType === 'countdown' ? ' or the date passes' : ''}.
                 </p>
               </div>
               <div className="md:col-span-2 border-t border-ops-700/70 pt-4">
@@ -790,6 +790,7 @@ export function AddWidgetModal({
                       No days selected means every day. An end time earlier than the start runs overnight;
                       the same start and end means all day. Inside its window this widget joins the
                       rotation; outside it, it's hidden. Times are in {(editWidget?.schedule?.timezone ?? browserTimezone).replace(/_/g, ' ')}.
+                      {showOnly && ' Show only is on, so this schedule is ignored until you turn show only off.'}
                     </p>
                   </div>
                 )}

@@ -58,14 +58,11 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
   };
 
   const activeOff = device.offBy !== null ? device.offSchedule[device.offBy] : null;
-  const offTimeText = activeOff ? ` (${describeSchedule(activeOff)})` : '';
   const statusText = !device.displayOn
     ? 'Display off'
-    : device.showOnlyOverride
-      ? `On: a show-only widget overrides the off time${offTimeText}`
-      : device.isOn
-        ? 'Display on'
-        : `Off by schedule${offTimeText}`;
+    : device.isOn
+      ? 'Display on'
+      : `Off by schedule${activeOff ? ` (${describeSchedule(activeOff)})` : ''}`;
 
   return (
     <div className="tb-panel mb-6 p-5 md:p-6">
@@ -116,9 +113,8 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
           <div>
             <h3 className="font-display text-lg text-ops-100">Off times</h3>
             <p className="text-xs text-ops-300">
-              The display turns off inside any enabled off time, unless a show-only widget is showing.
-              No days selected means every day; an end earlier than the start runs overnight; the same
-              start and end means all day.
+              The display turns off inside any enabled off time. No days selected means every day; an
+              end earlier than the start runs overnight; the same start and end means all day.
             </p>
           </div>
           <button
@@ -153,11 +149,7 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
                     />
                     <span className={window.enabled ? '' : 'text-ops-400'}>
                       {describeSchedule(window)}
-                      {device.offBy === index && (
-                        <span className="ml-2 text-xs text-accent-amber">
-                          {device.showOnlyOverride ? 'overridden by show-only' : 'in effect'}
-                        </span>
-                      )}
+                      {device.offBy === index && <span className="ml-2 text-xs text-accent-amber">in effect</span>}
                     </span>
                   </label>
                   <button

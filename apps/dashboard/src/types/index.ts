@@ -31,8 +31,6 @@ export interface Device {
   isOn: boolean;
   /** Index of the off window in effect right now, or null */
   offBy: number | null;
-  /** A show-only widget is keeping the display on through the off time in effect */
-  showOnlyOverride: boolean;
 }
 
 export interface DisplaySettingsUpdate {
