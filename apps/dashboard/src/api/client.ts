@@ -98,6 +98,11 @@ class ApiClient {
     return response.routes;
   }
 
+  // Microcontroller serial console (Server-Sent Events)
+  logStreamUrl(): string {
+    return `${API_BASE}/logs/stream`;
+  }
+
   async geocodeCities(query: string): Promise<Array<{ name: string; latitude: number; longitude: number; country?: string }>> {
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`;
     const response = await fetch(url);

@@ -5,6 +5,7 @@ import { DeviceSelector } from './components/DeviceSelector';
 import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
+import { DeviceLogs } from './components/DeviceLogs';
 
 const LAST_DEVICE_STORAGE_KEY = 'transit-board:last-selected-device-id';
 
@@ -266,6 +267,8 @@ function App() {
             )}
           </>
         )}
+
+        <DeviceLogs />
 
         <AddDeviceModal
           isOpen={isDeviceModalOpen}

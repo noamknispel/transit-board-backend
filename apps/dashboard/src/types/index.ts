@@ -84,3 +84,17 @@ export interface Subscription {
   stopName: string;
   createdAt: string;
 }
+
+// Microcontroller serial console
+export interface LogLine {
+  id: number;
+  ts: string;
+  source: 'device' | 'system';
+  text: string;
+}
+
+export interface SerialStatus {
+  enabled: boolean;
+  connected: boolean;
+  port: string | null;
+}

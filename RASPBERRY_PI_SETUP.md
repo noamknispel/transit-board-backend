@@ -79,6 +79,22 @@ curl http://localhost:3010/devices
 
 Press `Ctrl+C` to stop the server.
 
+## Step 6b: Board Console over USB (optional)
+
+If the MatrixPortal is plugged into the Pi by USB, the backend tails its serial
+console (everything `code.py` prints) and the dashboard shows it under
+**Board Console**. The backend user needs access to the serial port:
+
+```bash
+sudo usermod -aG dialout <username>
+# log out and back in (or reboot) for the group to apply
+ls /dev/serial/by-id/   # should list the board
+```
+
+Set `SERIAL_PORT` in `.env` if the board isn't auto-detected, or `SERIAL_PORT=off`
+to disable it. Only one program can read the port at a time, so close `screen`/`tio`
+sessions on the Pi while the backend is running.
+
 ## Step 7: Create Systemd Service (Auto-start)
 
 Create the service file:

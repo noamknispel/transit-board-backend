@@ -1,4 +1,5 @@
 import { router } from "./router";
+import { startSerialLog } from "./services/serial-log";
 
 // CORS middleware
 const corsHeaders = {
@@ -42,3 +43,5 @@ const server = Bun.serve({
 console.log(
   `🚇 Transit board backend running at http://localhost:${server.port}`,
 );
+
+startSerialLog();

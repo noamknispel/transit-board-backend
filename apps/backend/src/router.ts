@@ -1,6 +1,7 @@
 import * as deviceController from "./controllers/device.controller";
 import * as widgetController from "./controllers/widget.controller";
 import * as displayController from "./controllers/display.controller";
+import * as logsController from "./controllers/logs.controller";
 
 export const router = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -66,6 +67,16 @@ export const router = async (req: Request): Promise<Response> => {
   if (previewMatch && method === "GET") {
     const deviceId = previewMatch[1];
     return displayController.getPreview(req, deviceId);
+  }
+
+  // GET /logs - Recent microcontroller serial output
+  if (pathname === "/logs" && method === "GET") {
+    return logsController.getLogs();
+  }
+
+  // GET /logs/stream - Live microcontroller serial output (Server-Sent Events)
+  if (pathname === "/logs/stream" && method === "GET") {
+    return logsController.streamLogs(req);
   }
 
   // GET /devices - List all devices
