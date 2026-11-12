@@ -1,4 +1,4 @@
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, realpathSync } from "node:fs";
 
 // Tails the microcontroller's USB serial console (CircuitPython's print()
 // output) and keeps the most recent lines in memory for the dashboard.
@@ -24,6 +24,7 @@ type Listener = (event: { type: "line"; line: LogLine } | { type: "status"; stat
 
 const MAX_LINES = parseInt(process.env.SERIAL_LOG_LINES || "500");
 const RETRY_MS = 3000;
+const WATCH_MS = 5000;
 
 const lines: LogLine[] = [];
 const listeners = new Set<Listener>();
@@ -65,6 +66,15 @@ const findPort = (): string | null => {
   return existsSync("/dev/ttyACM0") ? "/dev/ttyACM0" : null;
 };
 
+// The device node a port path points at, e.g. by-id symlink -> /dev/ttyACM0.
+const resolvePort = (port: string): string | null => {
+  try {
+    return realpathSync(port);
+  } catch {
+    return null;
+  }
+};
+
 const readPort = async (port: string) => {
   // Raw mode with echo off: otherwise the tty echoes the board's output back
   // into CircuitPython's REPL input.
@@ -76,16 +86,32 @@ const readPort = async (port: string) => {
   setStatus({ connected: true, port });
   push("system", `Connected to ${port}`);
 
+  // When the board resets it can come back as a different ttyACM node while
+  // cat keeps blocking on the old one, so the stream silently stops. Restart
+  // the reader whenever the port we opened no longer points at the board.
+  const opened = resolvePort(port);
+  const watch = setInterval(() => {
+    const current = findPort();
+    if (!current || resolvePort(current) !== opened) {
+      push("system", `Board moved from ${opened} to ${current ? resolvePort(current) : "nowhere"}; reconnecting`);
+      proc.kill();
+    }
+  }, WATCH_MS);
+
   const decoder = new TextDecoder();
   let pending = "";
-  for await (const chunk of proc.stdout) {
-    pending += decoder.decode(chunk, { stream: true });
-    const parts = pending.split("\n");
-    pending = parts.pop() ?? "";
-    for (const part of parts) {
-      const text = cleanLine(part);
-      if (text.trim()) push("device", text);
+  try {
+    for await (const chunk of proc.stdout) {
+      pending += decoder.decode(chunk, { stream: true });
+      const parts = pending.split("\n");
+      pending = parts.pop() ?? "";
+      for (const part of parts) {
+        const text = cleanLine(part);
+        if (text.trim()) push("device", text);
+      }
     }
+  } finally {
+    clearInterval(watch);
   }
 
   const exitCode = await proc.exited;

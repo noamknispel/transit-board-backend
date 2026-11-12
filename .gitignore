@@ -9,3 +9,4 @@ tmp/
 
 .DS_Store
 __pycache__/
+*.tsbuildinfo
