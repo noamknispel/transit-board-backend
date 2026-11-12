@@ -145,6 +145,25 @@ describe("widget renderers", () => {
     expect(rowLit(0)).toBeGreaterThan(0);
     expect(rowLit(16)).toBeGreaterThan(0);
   });
+
+  test("clock draws a weather icon at the right edge", () => {
+    const iconLit = (weather: object) => {
+      const [canvas] = new ClockWidgetPlugin().render(
+        { time: "4:15 PM", date: "Nov 11", timezone: "EST", weather },
+        ctx,
+      );
+      let n = 0;
+      for (let y = 0; y < H; y++) for (let x = W - 18; x < W; x++) if (canvas!.getPixel(x, y).some(Boolean)) n++;
+      return n;
+    };
+    const base = { temp: 45, unit: "F", summary: "RAIN" };
+    expect(iconLit({ ...base, icon: "rain", isDay: true })).toBeGreaterThan(20);
+    // Every icon draws something, by day and by night.
+    for (const icon of ["clear", "partly", "cloudy", "fog", "rain", "snow", "storm"]) {
+      expect(iconLit({ ...base, icon, isDay: true })).toBeGreaterThan(0);
+      expect(iconLit({ ...base, icon, isDay: false })).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("encodePng", () => {

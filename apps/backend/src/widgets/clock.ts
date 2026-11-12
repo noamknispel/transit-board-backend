@@ -1,7 +1,10 @@
 import { WidgetPlugin } from "./base.js";
 import { WeatherService } from "../services/weather.js";
 import { Canvas, WHITE } from "../render/canvas.js";
+import { drawWeatherIcon, WEATHER_ICON_SIZE, type WeatherIcon } from "../render/icons.js";
 import { rowCenter, type RenderContext } from "../render/layout.js";
+
+const RIGHT_MARGIN = 2;
 
 /**
  * Clock widget plugin
@@ -152,23 +155,30 @@ export class ClockWidgetPlugin implements WidgetPlugin {
   render(data: any, ctx: RenderContext): Canvas[] {
     const canvas = new Canvas(ctx.width, ctx.height);
 
-    // Row 0: date + timezone
+    // Row 0: date + timezone, kept clear of the weather icon
     const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
-    canvas.text(dateLine.slice(0, 20), 2, rowCenter(0), WHITE);
+    canvas.text(dateLine.slice(0, data.weather ? 16 : 20), 2, rowCenter(0), WHITE);
 
-    // Row 1: time, plus compact weather when available
-    let timeLine = String(data.time ?? "");
+    // Row 1: time on the left
+    canvas.text(String(data.time ?? "").slice(0, 10), 2, rowCenter(1), WHITE);
+
+    // Weather on the right: an icon spanning both rows, temperature beside it
+    // on the time row. Without an icon (older cached data) the short summary
+    // text stands in for it.
     const weather = data.weather;
-    if (weather && typeof weather === "object" && weather.temp !== undefined) {
-      const unit = String(weather.unit ?? "").toUpperCase();
-      if (unit === "F" || unit === "C") {
-        let w = `${weather.temp}${unit}`;
-        const summary = String(weather.summary ?? "").toUpperCase();
-        if (summary) w += ` ${summary.slice(0, 4)}`;
-        timeLine = `${timeLine} ${w}`.trim();
+    const unit = String(weather?.unit ?? "").toUpperCase();
+    if (weather && typeof weather === "object" && weather.temp !== undefined && (unit === "F" || unit === "C")) {
+      let right = ctx.width - RIGHT_MARGIN;
+      if (weather.icon) {
+        const iconX = right - WEATHER_ICON_SIZE;
+        const iconY = Math.floor((ctx.height - WEATHER_ICON_SIZE) / 2);
+        drawWeatherIcon(canvas, weather.icon as WeatherIcon, iconX, iconY, weather.isDay !== false);
+        right = iconX - 2;
+      } else if (weather.summary) {
+        canvas.text(String(weather.summary).toUpperCase().slice(0, 4), right, rowCenter(0), WHITE, { align: "right" });
       }
+      canvas.text(`${weather.temp}${unit}`, right, rowCenter(1), WHITE, { align: "right" });
     }
-    canvas.text(timeLine.slice(0, 20), 2, rowCenter(1), WHITE);
 
     return [canvas];
   }
