@@ -225,6 +225,9 @@ session on the Pi while the backend is running.
 - Turn the board's display on or off
 - Brightness slider (5-100%). The matrix driver can only switch the panel on or off,
   so the backend dims the colors of the frames it sends instead
+- Daily schedule: on and off times in a chosen timezone (an off time earlier than the
+  on time runs overnight). The power switch still wins: when it's off, the schedule
+  can't turn the display on
 - Changes reach the board on its next poll (about 10 seconds); no USB or reflash needed
 
 ### Widget Types
@@ -264,10 +267,18 @@ session on the Pi while the backend is running.
   ```json
   { "name": "Living Room Display" }
   ```
-- `PUT /devices/:deviceId/settings` - Display brightness and power
+- `PUT /devices/:deviceId/settings` - Display brightness, power and schedule (all fields optional)
   ```json
-  { "brightness": 40, "displayOn": true }
+  {
+    "brightness": 40,
+    "displayOn": true,
+    "scheduleEnabled": true,
+    "scheduleOn": "07:00",
+    "scheduleOff": "23:00",
+    "scheduleTimezone": "America/New_York"
+  }
   ```
+  Device responses include `isOn`: whether the display is lit right now (power switch and schedule combined).
 
 ### Widgets
 - `GET /devices/:deviceId/widgets` - List widgets for a device

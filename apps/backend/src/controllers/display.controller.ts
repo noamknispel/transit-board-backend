@@ -1,4 +1,5 @@
-import { DeviceModel, MIN_BRIGHTNESS } from "../models/device.js";
+import { DeviceModel, MIN_BRIGHTNESS, type DisplaySettingsUpdate } from "../models/device.js";
+import { isDisplayOn, isValidTimezone, TIME_PATTERN, withDisplayState } from "../services/schedule.js";
 import { getWidgetsData } from "./widget.controller.js";
 import { widgetRegistry } from "../widgets/index.js";
 import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
@@ -62,7 +63,7 @@ async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
     ...DISPLAY,
     pollAfterSec: POLL_AFTER_SEC,
     // Header brightness switches the panel on/off; the dimming is in the palette.
-    brightness: device?.displayOn === false ? 0 : 100,
+    brightness: device && !isDisplayOn(device) ? 0 : 100,
     dimPercent: device?.brightness ?? 100,
   });
   return { encoded, canvases: frames.map((f) => f.canvas) };
@@ -156,7 +157,9 @@ export const getPreview = async (req: Request, deviceId: string) => {
 };
 
 /**
- * PUT /devices/:deviceId/settings  { brightness?: 5-100, displayOn?: boolean }
+ * PUT /devices/:deviceId/settings
+ *   { brightness?: 5-100, displayOn?: boolean, scheduleEnabled?: boolean,
+ *     scheduleOn?: "HH:MM", scheduleOff?: "HH:MM", scheduleTimezone?: IANA name }
  *
  * Takes effect on the device's next poll (the payload's ETag changes).
  */
@@ -168,7 +171,7 @@ export const updateSettings = async (req: Request, deviceId: string) => {
     return jsonResponse({ error: "Body must be JSON" }, 400);
   }
 
-  const update: { brightness?: number; displayOn?: boolean } = {};
+  const update: DisplaySettingsUpdate = {};
   if (body.brightness !== undefined) {
     const brightness = Number(body.brightness);
     if (!Number.isFinite(brightness) || brightness < MIN_BRIGHTNESS || brightness > 100) {
@@ -182,10 +185,30 @@ export const updateSettings = async (req: Request, deviceId: string) => {
     }
     update.displayOn = body.displayOn;
   }
+  if (body.scheduleEnabled !== undefined) {
+    if (typeof body.scheduleEnabled !== "boolean") {
+      return jsonResponse({ error: "scheduleEnabled must be a boolean" }, 400);
+    }
+    update.scheduleEnabled = body.scheduleEnabled;
+  }
+  for (const key of ["scheduleOn", "scheduleOff"] as const) {
+    if (body[key] !== undefined) {
+      if (typeof body[key] !== "string" || !TIME_PATTERN.test(body[key])) {
+        return jsonResponse({ error: `${key} must be HH:MM (24h)` }, 400);
+      }
+      update[key] = body[key];
+    }
+  }
+  if (body.scheduleTimezone !== undefined) {
+    if (typeof body.scheduleTimezone !== "string" || !isValidTimezone(body.scheduleTimezone)) {
+      return jsonResponse({ error: "scheduleTimezone must be an IANA timezone, e.g. America/New_York" }, 400);
+    }
+    update.scheduleTimezone = body.scheduleTimezone;
+  }
 
   const device = DeviceModel.updateDisplaySettings(deviceId, update);
   if (!device) return jsonResponse({ error: "Device not found" }, 404);
 
   cache.delete(deviceId);
-  return jsonResponse({ device });
+  return jsonResponse({ device: withDisplayState(device) });
 };

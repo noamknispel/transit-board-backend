@@ -8,12 +8,24 @@ export interface Device {
   lastSeen?: string | null;
   /** 5-100 (%) */
   brightness: number;
+  /** Power switch */
   displayOn: boolean;
+  scheduleEnabled: boolean;
+  /** "HH:MM", 24h, in scheduleTimezone */
+  scheduleOn: string;
+  scheduleOff: string;
+  scheduleTimezone: string;
+  /** Power switch and schedule combined: whether the panel is lit right now */
+  isOn: boolean;
 }
 
 export interface DisplaySettingsUpdate {
   brightness?: number;
   displayOn?: boolean;
+  scheduleEnabled?: boolean;
+  scheduleOn?: string;
+  scheduleOff?: string;
+  scheduleTimezone?: string;
 }
 
 // Widget types

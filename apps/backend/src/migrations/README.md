@@ -31,6 +31,7 @@ This directory contains SQL migration files that define the database schema.
 
 - `001_initial_schema.sql` - Creates stations, devices, and subscriptions tables
 - `004_device_display.sql` - Adds per-device `brightness` and `displayOn`
+- `005_display_schedule.sql` - Adds the daily on/off schedule (`scheduleEnabled`, `scheduleOn`, `scheduleOff`, `scheduleTimezone`)
 
 ## Notes
 

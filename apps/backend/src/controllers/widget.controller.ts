@@ -1,5 +1,6 @@
 import { WidgetModel, type WidgetInput } from "../models/widget.js";
 import { DeviceModel } from "../models/device.js";
+import { withDisplayState } from "../services/schedule.js";
 import { getWidgetData, validateWidgetConfig, widgetRegistry } from "../widgets/index.js";
 
 const jsonResponse = (data: any, status = 200) => {
@@ -14,7 +15,8 @@ const jsonResponse = (data: any, status = 200) => {
  */
 export const listDevices = async () => {
   try {
-    const devices = DeviceModel.getAll();
+    const now = new Date();
+    const devices = DeviceModel.getAll().map((device) => withDisplayState(device, now));
     return jsonResponse({ devices });
   } catch (error) {
     console.error("Error listing devices:", error);

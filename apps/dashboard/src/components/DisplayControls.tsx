@@ -3,19 +3,31 @@ import { Device, DisplaySettingsUpdate } from '../types';
 
 const MIN_BRIGHTNESS = 5;
 
+const browserTimezone = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+})();
+
 interface DisplayControlsProps {
   device: Device;
   onSave: (update: DisplaySettingsUpdate) => Promise<void>;
 }
 
 export function DisplayControls({ device, onSave }: DisplayControlsProps) {
-  // Local slider value so dragging stays smooth; saved when released.
+  // Local values so dragging/typing stays smooth; saved when the edit is done.
   const [brightness, setBrightness] = useState(device.brightness);
+  const [scheduleOn, setScheduleOn] = useState(device.scheduleOn);
+  const [scheduleOff, setScheduleOff] = useState(device.scheduleOff);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setBrightness(device.brightness);
-  }, [device.id, device.brightness]);
+    setScheduleOn(device.scheduleOn);
+    setScheduleOff(device.scheduleOff);
+  }, [device.id, device.brightness, device.scheduleOn, device.scheduleOff]);
 
   const save = async (update: DisplaySettingsUpdate) => {
     setSaving(true);
@@ -29,6 +41,18 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
   const commitBrightness = () => {
     if (brightness !== device.brightness) save({ brightness });
   };
+
+  const commitTime = (key: 'scheduleOn' | 'scheduleOff', value: string) => {
+    if (value && value !== device[key]) save({ [key]: value });
+  };
+
+  const statusText = !device.displayOn
+    ? 'Display off'
+    : device.isOn
+      ? device.scheduleEnabled
+        ? `Display on until ${device.scheduleOff}`
+        : 'Display on'
+      : `Off by schedule until ${device.scheduleOn}`;
 
   return (
     <div className="tb-panel mb-6 p-5 md:p-6">
@@ -50,8 +74,8 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
       </div>
 
       <div className="flex items-center gap-2 text-sm text-ops-200">
-        <span className={`inline-block h-2 w-2 rounded-full ${device.displayOn ? 'bg-accent-mint' : 'bg-ops-500'}`} />
-        {device.displayOn ? 'Display on' : 'Display off'}
+        <span className={`inline-block h-2 w-2 rounded-full ${device.isOn ? 'bg-accent-mint' : 'bg-ops-500'}`} />
+        {statusText}
       </div>
 
       <div className={`mt-4 ${device.displayOn ? '' : 'opacity-50'}`}>
@@ -72,6 +96,64 @@ export function DisplayControls({ device, onSave }: DisplayControlsProps) {
           onKeyUp={commitBrightness}
           className="w-full cursor-pointer accent-accent-cyan disabled:cursor-not-allowed"
         />
+      </div>
+
+      <div className="mt-5 border-t border-ops-700/70 pt-4">
+        <label className="tb-check-label">
+          <input
+            type="checkbox"
+            className="tb-checkbox"
+            checked={device.scheduleEnabled}
+            disabled={saving}
+            onChange={(e) => save({ scheduleEnabled: e.target.checked })}
+          />
+          Turn on and off on a schedule
+        </label>
+
+        {device.scheduleEnabled && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="schedule-on" className="tb-label">On at</label>
+              <input
+                id="schedule-on"
+                type="time"
+                className="tb-input"
+                value={scheduleOn}
+                disabled={saving}
+                onChange={(e) => setScheduleOn(e.target.value)}
+                onBlur={() => commitTime('scheduleOn', scheduleOn)}
+              />
+            </div>
+            <div>
+              <label htmlFor="schedule-off" className="tb-label">Off at</label>
+              <input
+                id="schedule-off"
+                type="time"
+                className="tb-input"
+                value={scheduleOff}
+                disabled={saving}
+                onChange={(e) => setScheduleOff(e.target.value)}
+                onBlur={() => commitTime('scheduleOff', scheduleOff)}
+              />
+            </div>
+            <p className="text-xs text-ops-300 sm:col-span-2">
+              Times are in {device.scheduleTimezone.replace(/_/g, ' ')}. An off time earlier than the
+              on time runs overnight.
+              {browserTimezone && browserTimezone !== device.scheduleTimezone && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="text-accent-cyan underline"
+                    onClick={() => save({ scheduleTimezone: browserTimezone })}
+                  >
+                    Use {browserTimezone.replace(/_/g, ' ')}
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

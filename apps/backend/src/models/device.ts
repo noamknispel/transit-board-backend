@@ -6,6 +6,11 @@ export interface Device {
   /** 5-100 (%); the backend dims the frames it sends. */
   brightness: number;
   displayOn: boolean;
+  scheduleEnabled: boolean;
+  /** "HH:MM", 24h, in scheduleTimezone */
+  scheduleOn: string;
+  scheduleOff: string;
+  scheduleTimezone: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -13,12 +18,20 @@ export interface Device {
 export interface DisplaySettingsUpdate {
   brightness?: number;
   displayOn?: boolean;
+  scheduleEnabled?: boolean;
+  scheduleOn?: string;
+  scheduleOff?: string;
+  scheduleTimezone?: string;
 }
 
 export const MIN_BRIGHTNESS = 5;
 
-// SQLite stores displayOn as 0/1.
-const fromRow = (row: any): Device => ({ ...row, displayOn: row.displayOn !== 0 });
+// SQLite stores booleans as 0/1.
+const fromRow = (row: any): Device => ({
+  ...row,
+  displayOn: row.displayOn !== 0,
+  scheduleEnabled: row.scheduleEnabled === 1,
+});
 
 export class DeviceModel {
   static getAll(): Device[] {
@@ -36,11 +49,19 @@ export class DeviceModel {
     const device = this.getById(id);
     if (!device) return undefined;
 
-    const brightness = update.brightness ?? device.brightness;
-    const displayOn = update.displayOn ?? device.displayOn;
+    const next = { ...device, ...update };
     db.prepare(
-      "UPDATE devices SET brightness = ?, displayOn = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(brightness, displayOn ? 1 : 0, id);
+      `UPDATE devices SET brightness = ?, displayOn = ?, scheduleEnabled = ?, scheduleOn = ?,
+         scheduleOff = ?, scheduleTimezone = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(
+      next.brightness,
+      next.displayOn ? 1 : 0,
+      next.scheduleEnabled ? 1 : 0,
+      next.scheduleOn,
+      next.scheduleOff,
+      next.scheduleTimezone,
+      id,
+    );
     return this.getById(id);
   }
 

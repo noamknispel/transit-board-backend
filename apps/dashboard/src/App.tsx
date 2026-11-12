@@ -48,6 +48,18 @@ function App() {
     loadDevices();
   }, []);
 
+  // Keep each device's on/off state current as schedule times pass
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        setDevices(await api.getDevices());
+      } catch {
+        // Transient; the next refresh will catch up.
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Load widgets and subscriptions when device changes
   useEffect(() => {
     if (selectedDeviceId) {
