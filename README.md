@@ -87,6 +87,10 @@ MTA_API_KEY=your_mta_api_key_here
 # Server configuration
 PORT=3010
 HOST=0.0.0.0
+
+# Microcontroller serial console (optional, see "Board Console" below)
+# SERIAL_PORT=/dev/ttyACM0   # auto-detected when unset; "off" disables it
+# SERIAL_LOG_LINES=500
 ```
 
 Get your MTA API key from: https://api.mta.info/
@@ -138,6 +142,8 @@ User=pi
 WorkingDirectory=/home/pi/transit-board-backend/apps/backend
 Environment="PATH=/home/pi/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/home/pi/.bun/bin/bun src/index.ts
+# Lets the backend read the microcontroller's USB serial port (Board Console)
+SupplementaryGroups=dialout
 Restart=always
 RestartSec=10
 
@@ -181,6 +187,34 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - Uploading firmware
 - Connecting to backend
 
+### Step 9: Board Console (optional)
+
+With the MatrixPortal plugged into the Pi by USB, the backend reads the board's
+serial console — everything `code.py` prints — and the dashboard shows it live
+in the **Board Console** panel. No firmware changes are needed.
+
+1. Give the backend access to the serial port. The systemd unit above already
+   has `SupplementaryGroups=dialout`; if you run the backend by hand, add your
+   user to the group instead and log out and back in:
+   ```bash
+   sudo usermod -aG dialout $USER
+   ```
+2. Check the Pi sees the board:
+   ```bash
+   ls /dev/serial/by-id/
+   ```
+3. Restart the backend. Its log should show `🔌 Watching for microcontroller serial console`,
+   and `curl localhost:3010/logs` should report `"connected": true`.
+
+The port is auto-detected (first entry in `/dev/serial/by-id/`, then `/dev/ttyACM0`).
+Set `SERIAL_PORT` in `.env` to pick a specific one, or `SERIAL_PORT=off` to disable it.
+The reader only runs on Linux, so on a Mac in development the panel shows
+"Serial disabled". If the board is unplugged or resets, the backend reconnects
+every few seconds.
+
+Only one program can read a serial port at a time: close any `screen`/`tio`
+session on the Pi while the backend is running.
+
 ## Dashboard Features
 
 ### Device Management
@@ -210,6 +244,11 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - Set individual display duration per widget
 - Enable/disable widgets without deleting
 - Edit widget configuration anytime
+
+### Board Console
+- Live serial output from the microcontroller plugged into the Pi
+- Connection status, timestamps, pause and clear
+- Lines from the backend itself (connect/disconnect, errors) are highlighted
 
 ## API Endpoints
 
@@ -243,6 +282,19 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
   ```
 - `DELETE /devices/:deviceId/subscriptions/:id` - Delete subscription
 
+### Logs (microcontroller serial console)
+- `GET /logs` - Connection status and the most recent lines as JSON
+  ```json
+  {
+    "status": { "enabled": true, "connected": true, "port": "/dev/serial/by-id/usb-Adafruit_..." },
+    "lines": [{ "id": 1, "ts": "2026-11-11T21:30:00.000Z", "source": "device", "text": "Starting main loop" }]
+  }
+  ```
+- `GET /logs/stream` - The same data as Server-Sent Events: a `status` event, the buffered lines, then live updates
+  ```bash
+  curl -N http://<raspberry-pi-ip>:3010/logs/stream
+  ```
+
 ## Tech Stack
 
 - **Backend**: Bun runtime + SQLite database
@@ -272,7 +324,13 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - Verify WiFi credentials in `settings.toml`
 - Check backend URL uses Raspberry Pi's IP (not localhost)
 - Ensure device ID matches one created in dashboard
-- Check serial output for connection errors
+- Check serial output for connection errors (dashboard **Board Console**, or `curl http://<raspberry-pi-ip>:3010/logs`)
+
+### Board Console is empty
+- "Serial disabled": the backend isn't on Linux, or `SERIAL_PORT=off`
+- "Board not connected": check the USB cable (some are power-only) and `ls /dev/serial/by-id/`
+- "Disconnected … Permission denied": the backend user isn't in the `dialout` group (see Step 9)
+- Connected but no lines: another program (`screen`, `tio`) has the port open; close it and restart the backend
 
 ## Development
 
@@ -285,7 +343,7 @@ apps/backend/
 │   ├── router.ts             # API routes
 │   ├── controllers/          # Request handlers
 │   ├── models/               # Database models
-│   ├── services/             # Business logic (GTFS-RT)
+│   ├── services/             # Business logic (GTFS-RT, serial console reader)
 │   ├── widgets/              # Widget plugins (data + rendering)
 │   ├── render/               # Canvas, bitmap font, payload encoder, PNG preview
 │   └── migrations/           # Database migrations

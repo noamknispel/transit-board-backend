@@ -26,6 +26,7 @@ from digitalio import DigitalInOut
 from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_socketpool
 import adafruit_requests
+import adafruit_connection_manager
 from adafruit_display_text import label
 
 from display_protocol import read_display, ProtocolError
@@ -155,10 +156,23 @@ pool = adafruit_esp32spi_socketpool.SocketPool(esp)
 requests = adafruit_requests.Session(pool)
 
 
+def close_sockets():
+    """
+    Drop every socket the connection manager is holding. A request that fails
+    mid-read leaves its socket marked in use, and every later request to the
+    same host then fails with "An existing socket is already connected".
+    """
+    try:
+        adafruit_connection_manager.connection_manager_close_all(pool)
+    except Exception as close_error:
+        print("Socket cleanup error:", close_error)
+
+
 def init_http_session():
     """Recreate socket pool + HTTP session for ESP32 SPI stack."""
     global pool
     global requests
+    close_sockets()
     pool = adafruit_esp32spi_socketpool.SocketPool(esp)
     requests = adafruit_requests.Session(pool)
 
@@ -242,17 +256,16 @@ def fetch_display(etag):
 
     for attempt in range(2):
         print("Fetching:", url, "(attempt", attempt + 1, ")")
+        response = None
         try:
             response = requests.get(url, headers=request_headers, timeout=10)
             print("Response status:", response.status_code)
 
             if response.status_code == 304:
-                response.close()
                 return NOT_MODIFIED
 
             if response.status_code != 200:
                 print("HTTP error:", response.status_code)
-                response.close()
                 return None
 
             new_etag = response.headers.get("etag")
@@ -266,7 +279,6 @@ def fetch_display(etag):
             request_headers = {}
 
             settings, new_frames = read_display(response.iter_content(chunk_size=1024))
-            response.close()
             print("Received {} frames".format(len(new_frames)))
             return settings, new_frames, new_etag
         except ProtocolError as e:
@@ -278,12 +290,24 @@ def fetch_display(etag):
             import traceback
             traceback.print_exception(e)
 
+            # The failed response may still own the socket; release it so the
+            # retry (or the next poll) can open a fresh one.
+            response = None
+            close_sockets()
+
             # Retry once after reconnecting transport/session.
             if attempt == 0:
                 time.sleep(RECONNECT_DELAY)
                 if reconnect_wifi():
                     continue
             return None
+        finally:
+            # Every exit path must give the socket back to the connection manager.
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
 
     return None
 

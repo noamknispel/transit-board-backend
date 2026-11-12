@@ -101,7 +101,12 @@ Each poll sends `If-None-Match` with the last payload's `ETag`; when nothing has
 
 ## Monitoring
 
-Connect via serial monitor to see debug output:
+**From the dashboard:** with the board plugged into the Raspberry Pi by USB, its
+output appears live in the **Board Console** panel at `http://<raspberry-pi-ip>:3010/dashboard/`.
+See the main [README](../../README.md#step-9-board-console-optional) for the one-time Pi setup.
+
+**From a serial monitor** (board plugged into your computer, or into the Pi with
+the backend stopped, since only one program can read the port at a time):
 
 ```bash
 # macOS/Linux
