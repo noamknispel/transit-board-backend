@@ -1,10 +1,12 @@
 import { WidgetPlugin } from "./base.js";
 import { WeatherService } from "../services/weather.js";
-import { Canvas, WHITE } from "../render/canvas.js";
+import { Canvas, hexToRgb, WHITE } from "../render/canvas.js";
+import { CHAR_WIDTH, measureText } from "../render/font.js";
 import { drawWeatherIcon, WEATHER_ICON_SIZE, type WeatherIcon } from "../render/icons.js";
 import { rowCenter, type RenderContext } from "../render/layout.js";
 
 const RIGHT_MARGIN = 2;
+const SUMMARY_COLOR = hexToRgb(0xa0a0a0);
 
 /**
  * Clock widget plugin
@@ -155,16 +157,9 @@ export class ClockWidgetPlugin implements WidgetPlugin {
   render(data: any, ctx: RenderContext): Canvas[] {
     const canvas = new Canvas(ctx.width, ctx.height);
 
-    // Row 0: date + timezone, kept clear of the weather icon
-    const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
-    canvas.text(dateLine.slice(0, data.weather ? 16 : 20), 2, rowCenter(0), WHITE);
-
-    // Row 1: time on the left
-    canvas.text(String(data.time ?? "").slice(0, 10), 2, rowCenter(1), WHITE);
-
-    // Weather on the right: an icon spanning both rows, temperature beside it
-    // on the time row. Without an icon (older cached data) the short summary
-    // text stands in for it.
+    // Weather on the right: an icon spanning both rows, with the conditions
+    // (e.g. "CLDY") on the date row and the temperature on the time row.
+    let dateRight = ctx.width - RIGHT_MARGIN;
     const weather = data.weather;
     const unit = String(weather?.unit ?? "").toUpperCase();
     if (weather && typeof weather === "object" && weather.temp !== undefined && (unit === "F" || unit === "C")) {
@@ -174,11 +169,22 @@ export class ClockWidgetPlugin implements WidgetPlugin {
         const iconY = Math.floor((ctx.height - WEATHER_ICON_SIZE) / 2);
         drawWeatherIcon(canvas, weather.icon as WeatherIcon, iconX, iconY, weather.isDay !== false);
         right = iconX - 2;
-      } else if (weather.summary) {
-        canvas.text(String(weather.summary).toUpperCase().slice(0, 4), right, rowCenter(0), WHITE, { align: "right" });
+      }
+      const summary = String(weather.summary ?? "").toUpperCase().slice(0, 5);
+      if (summary) {
+        canvas.text(summary, right, rowCenter(0), SUMMARY_COLOR, { align: "right" });
       }
       canvas.text(`${weather.temp}${unit}`, right, rowCenter(1), WHITE, { align: "right" });
+      dateRight = right - measureText(summary) - CHAR_WIDTH;
     }
+
+    // Row 0: date + timezone, cut short rather than run into the weather
+    const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
+    const dateChars = Math.max(0, Math.floor((dateRight - 2) / CHAR_WIDTH));
+    canvas.text(dateLine.slice(0, Math.min(20, dateChars)), 2, rowCenter(0), WHITE);
+
+    // Row 1: time on the left
+    canvas.text(String(data.time ?? "").slice(0, 10), 2, rowCenter(1), WHITE);
 
     return [canvas];
   }
