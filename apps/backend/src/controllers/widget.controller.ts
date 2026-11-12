@@ -1,4 +1,4 @@
-import { WidgetModel, type WidgetInput } from "../models/widget.js";
+import { WidgetModel, type Widget, type WidgetInput } from "../models/widget.js";
 import { DeviceModel } from "../models/device.js";
 import { isInWindow, validateWindow, withDisplayState, type TimeWindow } from "../services/schedule.js";
 import { getWidgetData, validateWidgetConfig, widgetRegistry } from "../widgets/index.js";
@@ -17,7 +17,9 @@ const jsonResponse = (data: any, status = 200) => {
 export const listDevices = async () => {
   try {
     const now = new Date();
-    const devices = DeviceModel.getAll().map((device) => withDisplayState(device, now));
+    const devices = await Promise.all(
+      DeviceModel.getAll().map(async (device) => withDisplayState(device, now, await hasActiveShowOnly(device.id))),
+    );
     return jsonResponse({ devices });
   } catch (error) {
     console.error("Error listing devices:", error);
@@ -210,8 +212,21 @@ export const reorderWidgets = async (req: Request, deviceId: string) => {
  */
 export async function getWidgetsData(deviceId: string) {
   const widgets = WidgetModel.getByDeviceId(deviceId, true); // enabled only
-  const now = new Date();
-  
+  return pickDisplayed(await loadVisibleWidgets(widgets, deviceId, new Date()));
+}
+
+/**
+ * Whether a show-only widget is showing right now, which keeps the display on
+ * through its off times. Only loads the show-only widgets' data.
+ */
+export async function hasActiveShowOnly(deviceId: string): Promise<boolean> {
+  const showOnly = WidgetModel.getByDeviceId(deviceId, true).filter((w) => w.showOnly === 1);
+  if (showOnly.length === 0) return false;
+  return (await loadVisibleWidgets(showOnly, deviceId, new Date())).length > 0;
+}
+
+/** Load each widget's data, dropping ones that are out of schedule, failed, or have nothing to show. */
+async function loadVisibleWidgets(widgets: Widget[], deviceId: string, now: Date) {
   const widgetsWithData = await Promise.all(
     widgets.map(async (widget) => {
       const config = JSON.parse(widget.config);
@@ -237,6 +252,5 @@ export async function getWidgetsData(deviceId: string) {
     })
   );
 
-  // Drop widgets that failed to load or have nothing to show
-  return pickDisplayed(widgetsWithData.filter((w) => w !== null));
+  return widgetsWithData.filter((w) => w !== null);
 }

@@ -1,6 +1,6 @@
 import { DeviceModel, MIN_BRIGHTNESS, type DisplaySettingsUpdate } from "../models/device.js";
 import { isDisplayOn, validateWindow, withDisplayState } from "../services/schedule.js";
-import { getWidgetsData } from "./widget.controller.js";
+import { getWidgetsData, hasActiveShowOnly } from "./widget.controller.js";
 import { widgetRegistry } from "../widgets/index.js";
 import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
 import { encodePng } from "../render/png.js";
@@ -64,7 +64,8 @@ async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
     ...DISPLAY,
     pollAfterSec: POLL_AFTER_SEC,
     // Header brightness switches the panel on/off; the dimming is in the palette.
-    brightness: device && !isDisplayOn(device) ? 0 : 100,
+    // A showing show-only widget keeps the display on through off times.
+    brightness: device && !isDisplayOn(device, new Date(), widgets.some((w) => w.showOnly)) ? 0 : 100,
     dimPercent: device?.brightness ?? 100,
   });
   return { encoded, canvases: frames.map((f) => f.canvas) };
@@ -209,5 +210,5 @@ export const updateSettings = async (req: Request, deviceId: string) => {
   if (!device) return jsonResponse({ error: "Device not found" }, 404);
 
   cache.delete(deviceId);
-  return jsonResponse({ device: withDisplayState(device) });
+  return jsonResponse({ device: withDisplayState(device, new Date(), await hasActiveShowOnly(deviceId)) });
 };

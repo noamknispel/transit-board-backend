@@ -228,7 +228,8 @@ session on the Pi while the backend is running.
 - Off times: any number of windows when the display turns off, each with its own days
   and hours and its own enable switch (e.g. every night 23:00–07:00, weekdays
   09:00–17:00 while you're out, all day Friday). An end earlier than the start runs
-  overnight; the same start and end means all day. The power switch still wins
+  overnight; the same start and end means all day. An active show-only widget keeps
+  the display on through off times; the power switch still wins over everything
 - Changes reach the board on its next poll (about 10 seconds); no USB or reflash needed
 
 ### Widget Types
@@ -259,7 +260,8 @@ session on the Pi while the backend is running.
   mornings). Inside its window it joins the rotation with the always-on widgets;
   outside it, it's hidden. Widgets without a schedule are always on
 - **Show only**: while a show-only widget is active, the board shows only show-only
-  widgets, e.g. a countdown on the big day
+  widgets, e.g. a countdown on the big day. It also overrides the display's off times
+  (not the power button), and its own widget schedule still limits when it's active
 - Drag-and-drop to reorder widgets
 - Set individual display duration per widget
 - Enable/disable widgets without deleting
@@ -290,7 +292,8 @@ session on the Pi while the backend is running.
   }
   ```
   `days` uses 0 = Sunday … 6 = Saturday (empty = every day). Device responses include `isOn`
-  (whether the display is lit right now) and `offBy` (index of the off time in effect, or null).
+  (whether the display is lit right now), `offBy` (index of the off time in effect, or null) and
+  `showOnlyOverride` (a show-only widget is keeping the display on through that off time).
 
 ### Widgets
 - `GET /devices/:deviceId/widgets` - List widgets for a device

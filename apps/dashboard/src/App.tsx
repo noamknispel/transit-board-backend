@@ -48,15 +48,18 @@ function App() {
     loadDevices();
   }, []);
 
-  // Keep each device's on/off state current as schedule times pass
+  // Re-read each device's on/off state, which depends on the time and on show-only widgets
+  const refreshDevices = async () => {
+    try {
+      setDevices(await api.getDevices());
+    } catch {
+      // Transient; the next refresh will catch up.
+    }
+  };
+
+  // Keep it current as schedule times pass
   useEffect(() => {
-    const timer = setInterval(async () => {
-      try {
-        setDevices(await api.getDevices());
-      } catch {
-        // Transient; the next refresh will catch up.
-      }
-    }, 60_000);
+    const timer = setInterval(refreshDevices, 60_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -96,6 +99,8 @@ function App() {
       setError(null);
       const data = await api.getWidgets(selectedDeviceId);
       setWidgets(data);
+      // Widget changes (show-only, schedules) can change whether the display is on.
+      refreshDevices();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load widgets');
     } finally {

@@ -89,20 +89,25 @@ export function activeOffWindow(device: Device, now = new Date()): OffWindow | n
   return device.offSchedule.find((window) => window.enabled && isInWindow(window, now)) ?? null;
 }
 
-/** The power switch and the off schedule together. */
-export function isDisplayOn(device: Device, now = new Date()): boolean {
-  return device.displayOn && !activeOffWindow(device, now);
+/**
+ * The power switch, the off schedule and show-only widgets together. The power
+ * switch always wins; an active show-only widget overrides the off times.
+ */
+export function isDisplayOn(device: Device, now = new Date(), showOnlyActive = false): boolean {
+  return device.displayOn && (showOnlyActive || !activeOffWindow(device, now));
 }
 
 /**
  * Device as the API returns it: stored settings plus the current state.
- * `offBy` is the index of the off window currently in effect, if any.
+ * `offBy` is the index of the off window currently in effect, if any;
+ * `showOnlyOverride` means a show-only widget is keeping the display on anyway.
  */
-export function withDisplayState(device: Device, now = new Date()) {
+export function withDisplayState(device: Device, now = new Date(), showOnlyActive = false) {
   const window = activeOffWindow(device, now);
   return {
     ...device,
-    isOn: device.displayOn && !window,
+    isOn: isDisplayOn(device, now, showOnlyActive),
     offBy: window ? device.offSchedule.indexOf(window) : null,
+    showOnlyOverride: device.displayOn && window !== null && showOnlyActive,
   };
 }
