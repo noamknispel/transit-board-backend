@@ -248,7 +248,17 @@ session on the Pi while the backend is running.
 - Optional date display
 - Timezone support
 
+**Countdown Widget**
+- A message and the time left until a date: "12 days", "1 day 5h", "5h 20m", "25 min"
+- Shows the target date on the right (or the time, when it's today)
+- Disappears once the date passes
+
 ### Widget Management
+- **Schedule**: limit a widget to certain days and times (e.g. transit on weekday
+  mornings). Inside its window it joins the rotation with the always-on widgets;
+  outside it, it's hidden. Widgets without a schedule are always on
+- **Show only**: while a show-only widget is active, the board shows only show-only
+  widgets, e.g. a countdown on the big day
 - Drag-and-drop to reorder widgets
 - Set individual display duration per widget
 - Enable/disable widgets without deleting

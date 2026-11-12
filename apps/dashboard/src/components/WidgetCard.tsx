@@ -1,15 +1,38 @@
-import { Widget } from '../types';
+import { useEffect, useState } from 'react';
+import { CountdownWidget, UpdateWidgetRequest, Widget } from '../types';
+import { describeSchedule } from '../schedule';
+
+function countdownStatus(config: CountdownWidget['config'], now: number): string {
+  const remainingMs = Date.parse(config.target) - now;
+  if (remainingMs <= 0) return 'Finished';
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const left = days >= 2 ? `${days} days` : days === 1 ? `1 day ${hours % 24}h` : hours >= 1 ? `${hours}h ${minutes % 60}m` : `${minutes} min`;
+  return `${left} left · ${new Date(config.target).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+}
 
 interface WidgetCardProps {
   widget: Widget;
   onEdit: (widget: Widget) => void;
   onDelete: (widgetId: number) => void;
   onToggleEnabled: (widgetId: number, enabled: boolean) => void;
+  onUpdate: (widgetId: number, data: UpdateWidgetRequest) => void;
   isDragging?: boolean;
   dragHandleProps?: any;
 }
 
-export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDragging, dragHandleProps }: WidgetCardProps) {
+export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate, isDragging, dragHandleProps }: WidgetCardProps) {
+  // Re-render every 30s so countdown status stays current.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (widget.type !== 'countdown') return;
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, [widget.type]);
+
+  const countdownFinished = widget.type === 'countdown' && Date.parse(widget.config.target) <= now;
+
   const getWidgetIcon = (type: string) => {
     switch (type) {
       case 'transit':
@@ -18,6 +41,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
         return 'MSG';
       case 'clock':
         return 'CLK';
+      case 'countdown':
+        return 'CDN';
       default:
         return 'WGT';
     }
@@ -31,6 +56,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
         return widget.config.text.substring(0, 50) + (widget.config.text.length > 50 ? '...' : '');
       case 'clock':
         return `${widget.config.format.toUpperCase()} ${widget.config.showDate ? '+ Date' : ''}`;
+      case 'countdown':
+        return `${widget.config.message} · ${countdownStatus(widget.config, now)}`;
       default:
         return 'Unknown widget';
     }
@@ -40,7 +67,7 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
     <div
       className={`mb-3 rounded-xl border p-4 transition ${
         isDragging ? 'border-accent-cyan shadow-glow bg-ops-900/85' : 'border-ops-700/70 bg-ops-900/60'
-      } ${!widget.enabled ? 'opacity-65' : ''}`}
+      } ${!widget.enabled || countdownFinished ? 'opacity-65' : ''}`}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div 
@@ -68,6 +95,14 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
             <div className="flex flex-wrap items-center gap-3 text-xs text-ops-300">
               <span className="rounded bg-ops-900 px-2 py-1">Duration: {widget.duration}s</span>
               <span className="rounded bg-ops-900 px-2 py-1">Order: {widget.displayOrder + 1}</span>
+              {widget.schedule && (
+                <span className="rounded bg-accent-cyan/15 px-2 py-1 text-accent-cyan">
+                  {describeSchedule(widget.schedule)}
+                </span>
+              )}
+              {widget.showOnly && (
+                <span className="rounded bg-accent-amber/20 px-2 py-1 text-accent-amber">Show only</span>
+              )}
             </div>
           </div>
         </div>
@@ -81,6 +116,17 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, isDraggi
             }`}
           >
             {widget.enabled ? 'Enabled' : 'Disabled'}
+          </button>
+          <button
+            onClick={() => onUpdate(widget.id, { showOnly: !widget.showOnly })}
+            title="While this widget is showing, hide every widget that isn't show-only"
+            className={`rounded px-3 py-1.5 text-xs font-semibold ${
+              widget.showOnly
+                ? 'bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30'
+                : 'bg-ops-800 text-ops-200 hover:bg-ops-700'
+            }`}
+          >
+            {widget.showOnly ? 'Show only: on' : 'Show only: off'}
           </button>
           <button
             onClick={() => onEdit(widget)}

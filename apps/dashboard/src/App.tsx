@@ -203,6 +203,16 @@ function App() {
     }
   };
 
+  const handleUpdateWidget = async (widgetId: number, data: UpdateWidgetRequest) => {
+    try {
+      setError(null);
+      await api.updateWidget(widgetId, data);
+      await loadWidgets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update widget');
+    }
+  };
+
   const handleToggleEnabled = async (widgetId: number, enabled: boolean) => {
     try {
       setError(null);
@@ -293,6 +303,7 @@ function App() {
                 onEdit={handleEditWidget}
                 onDelete={handleDeleteWidget}
                 onToggleEnabled={handleToggleEnabled}
+                onUpdate={handleUpdateWidget}
                 onAddWidget={handleAddWidget}
               />
             )}

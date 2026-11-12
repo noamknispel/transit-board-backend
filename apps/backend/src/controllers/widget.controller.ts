@@ -1,6 +1,6 @@
 import { WidgetModel, type WidgetInput } from "../models/widget.js";
 import { DeviceModel } from "../models/device.js";
-import { withDisplayState } from "../services/schedule.js";
+import { isInWindow, validateWindow, withDisplayState, type TimeWindow } from "../services/schedule.js";
 import { getWidgetData, validateWidgetConfig, widgetRegistry } from "../widgets/index.js";
 
 const jsonResponse = (data: any, status = 200) => {
@@ -58,6 +58,8 @@ export const createWidget = async (req: Request, deviceId: string) => {
       config: object;
       duration?: number;
       enabled?: boolean;
+      showOnly?: boolean;
+      schedule?: TimeWindow | null;
     };
 
     // Validate widget type
@@ -72,12 +74,19 @@ export const createWidget = async (req: Request, deviceId: string) => {
       return jsonResponse({ error: `Invalid config: ${error.message}` }, 400);
     }
 
+    const scheduleError = body.schedule ? validateWindow(body.schedule) : null;
+    if (scheduleError) {
+      return jsonResponse({ error: `Invalid schedule: ${scheduleError}` }, 400);
+    }
+
     const input: WidgetInput = {
       deviceId,
       type: body.type,
       config: body.config,
       duration: body.duration,
       enabled: body.enabled,
+      showOnly: body.showOnly,
+      schedule: body.schedule,
     };
 
     const widget = WidgetModel.create(input);
@@ -104,6 +113,8 @@ export const updateWidget = async (req: Request, widgetId: number) => {
       config?: object;
       duration?: number;
       enabled?: boolean;
+      showOnly?: boolean;
+      schedule?: TimeWindow | null;
     };
 
     // If type is being changed, validate it
@@ -123,11 +134,18 @@ export const updateWidget = async (req: Request, widgetId: number) => {
       }
     }
 
+    const scheduleError = body.schedule ? validateWindow(body.schedule) : null;
+    if (scheduleError) {
+      return jsonResponse({ error: `Invalid schedule: ${scheduleError}` }, 400);
+    }
+
     const updates: Partial<WidgetInput> = {
       type: body.type,
       config: body.config,
       duration: body.duration,
       enabled: body.enabled,
+      showOnly: body.showOnly,
+      schedule: body.schedule,
     };
 
     const widget = WidgetModel.update(widgetId, updates);
@@ -191,16 +209,24 @@ export const reorderWidgets = async (req: Request, deviceId: string) => {
  */
 export async function getWidgetsData(deviceId: string) {
   const widgets = WidgetModel.getByDeviceId(deviceId, true); // enabled only
+  const now = new Date();
   
   const widgetsWithData = await Promise.all(
     widgets.map(async (widget) => {
       const config = JSON.parse(widget.config);
+      const schedule: TimeWindow | null = widget.schedule ? JSON.parse(widget.schedule) : null;
+      // Outside its window a scheduled widget isn't shown (or even fetched).
+      if (schedule && !isInWindow(schedule, now)) return null;
       try {
         const data = await getWidgetData(widget.type, config, deviceId);
+        // e.g. a finished timer: enabled, but nothing to show
+        const plugin = widgetRegistry.get(widget.type);
+        if (plugin?.isVisible && !plugin.isVisible(data, now)) return null;
         return {
           id: widget.id,
           type: widget.type,
           duration: widget.duration,
+          showOnly: widget.showOnly === 1,
           data,
         };
       } catch (error) {
@@ -210,6 +236,16 @@ export async function getWidgetsData(deviceId: string) {
     })
   );
 
-  // Filter out any widgets that failed to load
-  return widgetsWithData.filter((w) => w !== null);
+  // Drop widgets that failed to load or have nothing to show
+  return pickDisplayed(widgetsWithData.filter((w) => w !== null));
+}
+
+/**
+ * Which visible widgets get the board. Always-on widgets and scheduled ones
+ * inside their window (out-of-window ones are already gone) rotate together;
+ * show-only widgets take over while any of them is visible.
+ */
+export function pickDisplayed<T extends { showOnly: boolean }>(visible: T[]): T[] {
+  const showOnly = visible.filter((w) => w.showOnly);
+  return showOnly.length > 0 ? showOnly : visible;
 }

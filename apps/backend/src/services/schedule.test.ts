@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Device } from "../models/device.js";
-import { isDisplayOn, scheduleAllowsOn } from "./schedule.js";
+import { isDisplayOn, isInWindow, scheduleAllowsOn, validateWindow } from "./schedule.js";
 
 const device = (overrides: Partial<Device> = {}): Device => ({
   id: "d",
@@ -51,5 +51,38 @@ describe("display schedule", () => {
     expect(isDisplayOn(device({ displayOn: false }), at("12:00"))).toBe(false);
     expect(isDisplayOn(device(), at("12:00"))).toBe(true);
     expect(isDisplayOn(device(), at("03:00"))).toBe(false);
+  });
+});
+
+describe("widget time windows", () => {
+  // 2026-11-13 is a Friday; New York is UTC-5.
+  const fri = (t: string) => new Date(`2026-11-13T${t}:00-05:00`);
+  const sat = (t: string) => new Date(`2026-11-14T${t}:00-05:00`);
+  const tz = "America/New_York";
+
+  test("weekday mornings", () => {
+    const w = { start: "07:00", end: "09:00", timezone: tz, days: [1, 2, 3, 4, 5] };
+    expect(isInWindow(w, fri("08:00"))).toBe(true);
+    expect(isInWindow(w, fri("09:00"))).toBe(false);
+    expect(isInWindow(w, sat("08:00"))).toBe(false);
+  });
+
+  test("an overnight window belongs to the day it starts", () => {
+    const w = { start: "22:00", end: "02:00", timezone: tz, days: [5] }; // Friday night
+    expect(isInWindow(w, fri("23:00"))).toBe(true);
+    expect(isInWindow(w, sat("01:30"))).toBe(true); // still Friday's window
+    expect(isInWindow(w, sat("23:00"))).toBe(false); // Saturday night isn't scheduled
+  });
+
+  test("equal start and end means the whole day", () => {
+    const w = { start: "00:00", end: "00:00", timezone: tz, days: [6] };
+    expect(isInWindow(w, sat("15:00"))).toBe(true);
+    expect(isInWindow(w, fri("15:00"))).toBe(false);
+  });
+
+  test("validation", () => {
+    expect(validateWindow({ start: "07:00", end: "09:00", timezone: tz })).toBeNull();
+    expect(validateWindow({ start: "7am", end: "09:00", timezone: tz })).not.toBeNull();
+    expect(validateWindow({ start: "07:00", end: "09:00", timezone: tz, days: [7] })).not.toBeNull();
   });
 });

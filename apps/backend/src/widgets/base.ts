@@ -29,6 +29,13 @@ export interface WidgetPlugin {
   render(data: any, ctx: RenderContext): Canvas[];
 
   /**
+   * Optional: whether the widget has anything to show right now. Hidden
+   * widgets are left out of the rotation (and don't count as show-only).
+   * Widgets without this method are always visible.
+   */
+  isVisible?(data: any, now: Date): boolean;
+
+  /**
    * Validate widget configuration
    * @param config Configuration to validate
    * @returns true if valid, throws error if invalid

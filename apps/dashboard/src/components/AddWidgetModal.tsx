@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetType } from '../types';
+import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetSchedule, WidgetType } from '../types';
+import { browserTimezone, DAY_LETTERS, describeSchedule, toLocalInput } from '../schedule';
+
 
 const FALLBACK_TIMEZONES = [
   'America/New_York',
@@ -61,6 +63,17 @@ export function AddWidgetModal({
   const [widgetType, setWidgetType] = useState<WidgetType>('message');
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled] = useState(true);
+  const [showOnly, setShowOnly] = useState(false);
+
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleStart, setScheduleStart] = useState('07:00');
+  const [scheduleEnd, setScheduleEnd] = useState('09:00');
+  const [scheduleDays, setScheduleDays] = useState<number[]>([]);
+
+  const [countdownMessage, setCountdownMessage] = useState('');
+  const [countdownColor, setCountdownColor] = useState('#FFB000');
+  // datetime-local value, in the browser's timezone
+  const [countdownTarget, setCountdownTarget] = useState('');
 
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
@@ -105,6 +118,11 @@ export function AddWidgetModal({
       setWidgetType(editWidget.type);
       setDuration(editWidget.duration);
       setEnabled(editWidget.enabled);
+      setShowOnly(Boolean(editWidget.showOnly));
+      setScheduleEnabled(Boolean(editWidget.schedule));
+      setScheduleStart(editWidget.schedule?.start ?? '07:00');
+      setScheduleEnd(editWidget.schedule?.end ?? '09:00');
+      setScheduleDays(editWidget.schedule?.days ?? []);
 
       switch (editWidget.type) {
         case 'message':
@@ -127,12 +145,25 @@ export function AddWidgetModal({
         case 'transit':
           setShowOriginInitials(typeof config.showOriginInitials === 'boolean' ? config.showOriginInitials : false);
           break;
+        case 'countdown':
+          setCountdownMessage(typeof config.message === 'string' ? config.message : '');
+          setCountdownColor(typeof config.color === 'string' ? config.color : '#FFB000');
+          setCountdownTarget(typeof config.target === 'string' ? toLocalInput(config.target) : '');
+          break;
       }
       setStepIndex(0);
     } else {
       setWidgetType('message');
       setDuration(10);
       setEnabled(true);
+      setShowOnly(false);
+      setScheduleEnabled(false);
+      setScheduleStart('07:00');
+      setScheduleEnd('09:00');
+      setScheduleDays([]);
+      setCountdownMessage('');
+      setCountdownColor('#FFB000');
+      setCountdownTarget('');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -277,9 +308,32 @@ export function AddWidgetModal({
       case 'transit':
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
+      case 'countdown':
+        return {
+          message: countdownMessage.trim(),
+          color: countdownColor,
+          // datetime-local is read in the browser's timezone
+          target: new Date(countdownTarget).toISOString(),
+          timezone: browserTimezone,
+        };
       default:
         return {};
     }
+  };
+
+  const buildSchedule = (): WidgetSchedule | null => {
+    if (!scheduleEnabled) return null;
+    return {
+      start: scheduleStart,
+      end: scheduleEnd,
+      // Keep the widget's timezone once set, so editing elsewhere doesn't shift it
+      timezone: editWidget?.schedule?.timezone ?? browserTimezone,
+      days: scheduleDays,
+    };
+  };
+
+  const toggleScheduleDay = (day: number) => {
+    setScheduleDays((days) => (days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort()));
   };
 
   const validateCurrentStep = () => {
@@ -293,6 +347,10 @@ export function AddWidgetModal({
       if (widgetType === 'message') {
         return messageText.trim().length > 0;
       }
+      if (widgetType === 'countdown') {
+        const target = Date.parse(countdownTarget);
+        return countdownMessage.trim().length > 0 && !Number.isNaN(target) && target > Date.now();
+      }
       if (widgetType === 'clock') {
         const hasTimezone = (clockTimezone || '').trim().length > 0;
         const hasLocation = !clockShowWeather || (clockLatitude !== null && clockLongitude !== null);
@@ -302,7 +360,7 @@ export function AddWidgetModal({
     }
 
     if (currentStep === 'Display') {
-      return duration >= 1;
+      return duration >= 1 && (!scheduleEnabled || (Boolean(scheduleStart) && Boolean(scheduleEnd)));
     }
 
     return true;
@@ -310,9 +368,10 @@ export function AddWidgetModal({
 
   const handleSubmit = async () => {
     const config = buildConfig();
+    const schedule = buildSchedule();
     const data: CreateWidgetRequest | UpdateWidgetRequest = editWidget
-      ? { config, duration, enabled }
-      : { type: widgetType, config, duration, enabled };
+      ? { config, duration, enabled, showOnly, schedule }
+      : { type: widgetType, config, duration, enabled, showOnly, schedule };
 
     await onSave(data);
     onClose();
@@ -324,6 +383,7 @@ export function AddWidgetModal({
     { id: 'message', title: 'Message', description: 'Broadcast custom announcements and notices.', label: 'MSG' },
     { id: 'clock', title: 'Clock', description: 'Display time, date, and timezone details.', label: 'CLK' },
     { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
+    { id: 'countdown', title: 'Countdown', description: 'A message and the time left until a date.', label: 'CDN' },
   ];
 
   return (
@@ -420,6 +480,47 @@ export function AddWidgetModal({
                     />
                     Enable scrolling
                   </label>
+                </>
+              )}
+
+              {widgetType === 'countdown' && (
+                <>
+                  <label className="tb-label">Message</label>
+                  <input
+                    type="text"
+                    value={countdownMessage}
+                    onChange={(e) => setCountdownMessage(e.target.value)}
+                    className="tb-input mb-1"
+                    placeholder="e.g. Vacation!, Mom's birthday, Leave for train"
+                    maxLength={40}
+                  />
+                  <p className="mb-4 text-xs text-ops-300">The board fits about 20 characters.</p>
+                  <label className="tb-label">Counts down to</label>
+                  <input
+                    type="datetime-local"
+                    value={countdownTarget}
+                    onChange={(e) => setCountdownTarget(e.target.value)}
+                    className="tb-input mb-4"
+                  />
+                  <label className="tb-label">Message Color</label>
+                  <div className="mb-4 flex gap-2">
+                    <input
+                      type="color"
+                      value={countdownColor}
+                      onChange={(e) => setCountdownColor(e.target.value)}
+                      className="h-10 w-14 rounded border border-ops-600 bg-ops-900"
+                    />
+                    <input
+                      type="text"
+                      value={countdownColor}
+                      onChange={(e) => setCountdownColor(e.target.value)}
+                      className="tb-input"
+                      placeholder="#FFB000"
+                    />
+                  </div>
+                  <p className="text-xs text-ops-300">
+                    Shows days, then hours, then minutes left, and disappears once the date passes.
+                  </p>
                 </>
               )}
 
@@ -651,6 +752,64 @@ export function AddWidgetModal({
                   />
                   Widget enabled
                 </label>
+                <label className="tb-check-label mt-3">
+                  <input
+                    type="checkbox"
+                    className="tb-checkbox"
+                    checked={showOnly}
+                    onChange={(e) => setShowOnly(e.target.checked)}
+                  />
+                  Show only this widget while it's active
+                </label>
+                <p className="mt-1 text-xs text-ops-300">
+                  Hides the other widgets until this one is disabled{widgetType === 'countdown' ? ' or the date passes' : ''}.
+                </p>
+              </div>
+              <div className="md:col-span-2 border-t border-ops-700/70 pt-4">
+                <label className="tb-check-label">
+                  <input
+                    type="checkbox"
+                    className="tb-checkbox"
+                    checked={scheduleEnabled}
+                    onChange={(e) => setScheduleEnabled(e.target.checked)}
+                  />
+                  Only show on a schedule
+                </label>
+                {scheduleEnabled && (
+                  <div className="mt-3 space-y-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAY_LETTERS.map((letter, day) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleScheduleDay(day)}
+                          className={`h-8 w-8 rounded-full text-xs font-semibold ${
+                            scheduleDays.includes(day)
+                              ? 'bg-accent-cyan/25 text-accent-cyan'
+                              : 'bg-ops-800 text-ops-300 hover:bg-ops-700'
+                          }`}
+                        >
+                          {letter}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="tb-label">From</label>
+                        <input type="time" value={scheduleStart} onChange={(e) => setScheduleStart(e.target.value)} className="tb-input" />
+                      </div>
+                      <div>
+                        <label className="tb-label">Until</label>
+                        <input type="time" value={scheduleEnd} onChange={(e) => setScheduleEnd(e.target.value)} className="tb-input" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-ops-300">
+                      No days selected means every day. An end time earlier than the start runs overnight;
+                      the same start and end means all day. Inside its window this widget joins the
+                      rotation; outside it, it's hidden. Times are in {(editWidget?.schedule?.timezone ?? browserTimezone).replace(/_/g, ' ')}.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -661,7 +820,15 @@ export function AddWidgetModal({
                 <p><strong>Type:</strong> {widgetType}</p>
                 <p><strong>Duration:</strong> {duration}s</p>
                 <p><strong>Status:</strong> {enabled ? 'Enabled' : 'Disabled'}</p>
+                <p><strong>Show only:</strong> {showOnly ? 'On' : 'Off'}</p>
+                <p><strong>Schedule:</strong> {scheduleEnabled ? describeSchedule(buildSchedule()!) : 'Always on'}</p>
               </div>
+              {widgetType === 'countdown' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Message:</strong> {countdownMessage || '(empty)'}</p>
+                  <p><strong>Counts down to:</strong> {countdownTarget ? new Date(countdownTarget).toLocaleString() : '(not set)'}</p>
+                </div>
+              )}
               {widgetType === 'message' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Message:</strong> {messageText || '(empty)'}</p>

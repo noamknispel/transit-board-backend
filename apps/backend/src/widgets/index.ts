@@ -2,6 +2,7 @@ import { WidgetPlugin } from "./base.js";
 import { TransitWidgetPlugin } from "./transit.js";
 import { MessageWidgetPlugin } from "./message.js";
 import { ClockWidgetPlugin } from "./clock.js";
+import { CountdownWidgetPlugin } from "./countdown.js";
 
 /**
  * Widget plugin registry
@@ -15,6 +16,7 @@ class WidgetRegistry {
     this.register(new TransitWidgetPlugin());
     this.register(new MessageWidgetPlugin());
     this.register(new ClockWidgetPlugin());
+    this.register(new CountdownWidgetPlugin());
   }
 
   register(plugin: WidgetPlugin): void {
