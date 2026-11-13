@@ -65,15 +65,20 @@ MAX_RECONNECT_FAILURES = 5
 WIDTH = 128
 HEIGHT = 32
 
+# Brightness levels per color channel are 2**BIT_DEPTH. More levels look better
+# (especially dimmed) but cost RAM and refresh rate. 4 is the safe default; try 5
+# (set BIT_DEPTH in settings.toml, and DISPLAY_BIT_DEPTH to match on the backend).
+BIT_DEPTH = min(6, max(4, int(os.getenv("BIT_DEPTH", "4"))))
+
 # ---------------------------------------------------------------------------
 # Matrix + Display Init
 # ---------------------------------------------------------------------------
 print("Initializing display...")
 displayio.release_displays()
 
-try:
-    matrix = rgbmatrix.RGBMatrix(
-        width=WIDTH, height=HEIGHT, bit_depth=4,
+def make_matrix(bit_depth):
+    return rgbmatrix.RGBMatrix(
+        width=WIDTH, height=HEIGHT, bit_depth=bit_depth,
         rgb_pins=[
             board.MTX_R1, board.MTX_G1, board.MTX_B1,
             board.MTX_R2, board.MTX_G2, board.MTX_B2,
@@ -89,6 +94,20 @@ try:
         tile=1,           # 1 tile tall
         serpentine=False,
     )
+
+
+try:
+    try:
+        matrix = make_matrix(BIT_DEPTH)
+    except Exception as e:
+        # Not enough RAM for the requested depth: fall back to the safe one.
+        if BIT_DEPTH == 4:
+            raise
+        print("bit_depth", BIT_DEPTH, "failed:", e, "- using 4")
+        gc.collect()
+        BIT_DEPTH = 4
+        matrix = make_matrix(BIT_DEPTH)
+    print("Matrix bit_depth:", BIT_DEPTH)
 
     display = framebufferio.FramebufferDisplay(matrix, auto_refresh=True)
     display.brightness = 0.8
