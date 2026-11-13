@@ -14,6 +14,13 @@ const DISPLAY: RenderContext = {
   height: Number(process.env.DISPLAY_HEIGHT || "32"),
 };
 const MAX_OFF_WINDOWS = 20;
+// Per-channel gain for panels that aren't color neutral, e.g. "1,0.85,0.6" tames a
+// blue-heavy white. Anything that isn't three non-negative numbers is ignored.
+const COLOR_BALANCE = (() => {
+  const gains = (process.env.DISPLAY_COLOR_BALANCE || "").split(",").map((v) => Number(v.trim()));
+  if (gains.length !== 3 || gains.some((g) => !Number.isFinite(g) || g < 0 || g > 4)) return undefined;
+  return gains as [number, number, number];
+})();
 const POLL_AFTER_SEC = Number(process.env.DISPLAY_POLL_SECONDS || "10");
 // Every frame lives in the microcontroller's RAM (~4 KB each), so cap them.
 const MAX_FRAMES = Math.min(255, Number(process.env.DISPLAY_MAX_FRAMES || "16"));
@@ -66,6 +73,7 @@ async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
     // Header brightness switches the panel on/off; the dimming is in the palette.
     brightness: device && !isDisplayOn(device) ? 0 : 100,
     dimPercent: device?.brightness ?? 100,
+    colorBalance: COLOR_BALANCE,
   });
   return { encoded, canvases: frames.map((f) => f.canvas) };
 }

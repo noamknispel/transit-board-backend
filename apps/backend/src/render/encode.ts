@@ -48,6 +48,12 @@ export interface DisplaySettings {
    * driver's own brightness is effectively on/off, so dimming happens here.
    */
   dimPercent?: number;
+  /**
+   * Per-channel gain [r, g, b] applied to every palette color, to correct a
+   * panel whose channels aren't equally bright (a blue-heavy white, say).
+   * Values above 1 are fine while there is dimming headroom; results clamp at 255.
+   */
+  colorBalance?: readonly [number, number, number];
 }
 
 // The firmware drives the matrix at bit_depth=4: a channel only has 16
@@ -58,10 +64,22 @@ export interface DisplaySettings {
 // shadows go fully off instead of all becoming the same dim gray.
 const LEVEL = 16;
 
-function dimColor(color: number, percent: number): number {
-  if (percent >= 100) return color;
-  const scale = (c: number) => Math.min(255, Math.round(((c * percent) / 100) / LEVEL) * LEVEL);
-  return (scale((color >> 16) & 255) << 16) | (scale((color >> 8) & 255) << 8) | scale(color & 255);
+type Balance = readonly [number, number, number];
+const NEUTRAL: Balance = [1, 1, 1];
+
+function adjustColor(color: number, percent: number, balance: Balance): number {
+  const neutral = balance[0] === 1 && balance[1] === 1 && balance[2] === 1;
+  if (percent >= 100 && neutral) return color;
+  const scale = (c: number, gain: number) => {
+    const v = ((c * percent) / 100) * gain;
+    // Undimmed colors are left for the firmware to truncate; dimmed ones snap to a level.
+    return Math.min(255, percent >= 100 ? Math.round(v) : Math.round(v / LEVEL) * LEVEL);
+  };
+  return (
+    (scale((color >> 16) & 255, balance[0]) << 16) |
+    (scale((color >> 8) & 255, balance[1]) << 8) |
+    scale(color & 255, balance[2])
+  );
 }
 
 export interface EncodedDisplay {
@@ -146,7 +164,7 @@ export function encodeDisplay(frames: EncodedFrame[], settings: DisplaySettings)
     view.setUint16(off + 2, f.palette.length, true);
     off += 4;
     for (const original of f.palette) {
-      const color = dimColor(original, settings.dimPercent ?? 100);
+      const color = adjustColor(original, settings.dimPercent ?? 100, settings.colorBalance ?? NEUTRAL);
       body[off++] = (color >> 16) & 255;
       body[off++] = (color >> 8) & 255;
       body[off++] = color & 255;

@@ -77,6 +77,18 @@ describe("encodeDisplay", () => {
     expect(Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3))).toEqual([32, 0, 0]);
   });
 
+  test("color balance scales each channel, with or without dimming", () => {
+    const c = new Canvas(W, H);
+    c.fillRect(0, 0, 1, 1, [200, 200, 200]);
+    const first = (s: object) =>
+      Array.from(encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, ...s }).body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 7));
+    expect(first({ colorBalance: [1, 0.5, 0.25] })).toEqual([200, 100, 50]);
+    // dimmed: 200 * 0.5 = 100 -> level 96/112; the balanced channels follow
+    expect(first({ dimPercent: 50, colorBalance: [1, 0.5, 0.25] })).toEqual([96, 48, 32]);
+    expect(first({ colorBalance: [1, 1, 1] })).toEqual([200, 200, 200]);
+    expect(first({ colorBalance: [2, 1, 1] })[0]).toBe(255); // clamps
+  });
+
   test("brightness 0 in the header turns the panel off", () => {
     const { body } = encodeDisplay([{ canvas: frame(), durationSec: 4 }], { ...settings, brightness: 0 });
     expect(body[12]).toBe(0);
