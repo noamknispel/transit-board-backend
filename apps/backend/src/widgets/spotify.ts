@@ -110,14 +110,15 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     canvas.text(truncate(toDisplayText(String(data.title ?? "")), maxChars), textX, rowCenter(0), parseColor(data.color, WHITE));
     canvas.text(truncate(toDisplayText(String(data.artist ?? "")), maxChars), textX, rowCenter(1), ARTIST_COLOR);
 
-    // Thin progress bar along the top or bottom edge, beside the art
+    // Thin progress bar along the top or bottom edge, from the art to the right edge
     const duration = Number(data.durationMs) || 0;
     if (data.showProgress !== false && duration > 0) {
-      const barWidth = ctx.width - RIGHT_MARGIN - textX;
+      const barX = art ? ART_SIZE : 0;
+      const barWidth = ctx.width - barX;
       const filled = Math.round((barWidth * Math.min(duration, Math.max(0, Number(data.progressMs) || 0))) / duration);
       const y = data.progressPosition === "bottom" ? ctx.height - 1 : 0;
-      canvas.fillRect(textX, y, barWidth, 1, PROGRESS_TRACK);
-      canvas.fillRect(textX, y, filled, 1, PROGRESS_FILL);
+      canvas.fillRect(barX, y, barWidth, 1, PROGRESS_TRACK);
+      canvas.fillRect(barX, y, filled, 1, PROGRESS_FILL);
     }
 
     return [canvas];

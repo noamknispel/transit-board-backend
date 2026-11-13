@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Canvas } from "../render/canvas.js";
-import { parseNowPlaying } from "../services/spotify.js";
+import { parseNowPlaying, SpotifyService } from "../services/spotify.js";
 import { SpotifyWidgetPlugin, toDisplayText, truncate } from "./spotify.js";
 
 const ctx = { width: 128, height: 32 };
@@ -80,13 +80,22 @@ describe("spotify widget", () => {
     // A quarter of the way through: the green fill covers 1/4 of the track
     const barY = 0; // top by default
     const filled = Array.from({ length: ctx.width }, (_, x) => canvas!.getPixel(x, barY)).filter(([r, g]) => g > r).length;
-    expect(filled).toBe(Math.round((ctx.width - 2 - 2) / 4));
+    expect(filled).toBe(ctx.width / 4); // no art in this fixture, so the bar spans the whole width
   });
 
   test("draws the progress bar on the bottom edge when asked", () => {
     const [canvas] = spotify.render({ ...playing, progressPosition: "bottom" }, ctx);
     expect(lit(canvas!, 36, ctx.width, ctx.height - 1)).toBeGreaterThan(0);
     expect(lit(canvas!, 36, ctx.width, 0, 1)).toBe(0);
+  });
+
+  test("runs from the art to the right edge of the board", () => {
+    const art = { width: 32, height: 32, data: new Uint8Array(32 * 32 * 3).fill(200) };
+    (SpotifyService as any).art.set("art-url", art);
+    const [canvas] = spotify.render({ ...playing, artUrl: "art-url", progressMs: 240_000 }, ctx);
+    expect(canvas!.getPixel(31, 0)).toEqual([200, 200, 200]); // the art, not the bar
+    expect(canvas!.getPixel(32, 0)[1]).toBeGreaterThan(0); // bar starts right after it
+    expect(canvas!.getPixel(ctx.width - 1, 0)[1]).toBeGreaterThan(0); // and reaches the last column
   });
 
   test("leaves the progress bar off when disabled", () => {
@@ -97,7 +106,8 @@ describe("spotify widget", () => {
 
   test("keeps long text inside the board", () => {
     const [canvas] = spotify.render({ ...playing, title: "x".repeat(80), artist: "y".repeat(80) }, ctx);
-    expect(lit(canvas!, ctx.width - 2, ctx.width)).toBe(0);
+    // Rows 1-30 hold text; the progress bar may touch the edge on row 0
+    expect(lit(canvas!, ctx.width - 2, ctx.width, 1, ctx.height - 1)).toBe(0);
   });
 
   test("validates config", () => {
