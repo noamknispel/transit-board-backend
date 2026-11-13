@@ -239,17 +239,25 @@ describe("simulatePanel", () => {
 
   test("truncates to the panel's levels and shows them on a 0-255 scale", () => {
     // 4 bits: 100 >> 4 = 6 of 15 -> 102; full white stays 255
-    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 4 }).getPixel(0, 0)).toEqual([102, 102, 102]);
-    expect(simulatePanel(canvasOf([255, 255, 255]), { bitDepth: 4 }).getPixel(0, 0)).toEqual([255, 255, 255]);
+    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 4, viewGamma: 1 }).getPixel(0, 0)).toEqual([102, 102, 102]);
+    expect(simulatePanel(canvasOf([255, 255, 255]), { bitDepth: 4, viewGamma: 1 }).getPixel(0, 0)).toEqual([255, 255, 255]);
     // 5 bits: 100 >> 3 = 12 of 31 -> 99
-    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 5 }).getPixel(0, 0)).toEqual([99, 99, 99]);
+    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 5, viewGamma: 1 }).getPixel(0, 0)).toEqual([99, 99, 99]);
     // and 5 bits is the default
-    expect(simulatePanel(canvasOf([100, 100, 100]), {}).getPixel(0, 0)).toEqual([99, 99, 99]);
+    expect(simulatePanel(canvasOf([100, 100, 100]), { viewGamma: 1 }).getPixel(0, 0)).toEqual([99, 99, 99]);
   });
 
   test("applies dimming and color balance first", () => {
     // 200 * 0.5 = 100 -> nearest step of 16 = 96 -> level 6 of 15 -> 102; blue * 0.5 -> 50 -> 48 -> level 3 -> 51
-    expect(simulatePanel(canvasOf([200, 200, 200]), { dimPercent: 50, colorBalance: [1, 1, 0.5], bitDepth: 4 }).getPixel(0, 0)).toEqual([102, 102, 51]);
+    expect(simulatePanel(canvasOf([200, 200, 200]), { dimPercent: 50, colorBalance: [1, 1, 0.5], bitDepth: 4, viewGamma: 1 }).getPixel(0, 0)).toEqual([102, 102, 51]);
+  });
+
+  test("encodes the light for a monitor by default, so mid-levels look as bright as on the panel", () => {
+    // 5 bits: 100 -> level 12 of 31 = 39% of full light -> 255 * 0.39^(1/2.2) = ~166 on a monitor
+    const [r] = simulatePanel(canvasOf([100, 100, 100]), {}).getPixel(0, 0);
+    expect(r).toBeGreaterThan(155);
+    expect(r).toBeLessThan(175);
+    expect(simulatePanel(canvasOf([255, 255, 255]), {}).getPixel(0, 0)).toEqual([255, 255, 255]);
   });
 
   test("keeps black black and doesn't touch the source canvas", () => {

@@ -93,13 +93,23 @@ export function adjustColor(color: number, percent: number, balance: Balance, bi
 /**
  * What the panel will actually light for `canvas`: the same dimming and color
  * balance the encoder applies, then the firmware's truncation to
- * `bitDepth` bits per channel, shown on the 0-255 scale. For previews.
+ * `bitDepth` bits per channel. For previews.
+ *
+ * The LEDs emit light in proportion to the level, but a monitor shows pixel
+ * values with a gamma (~2.2), so showing levels as plain pixel values makes the
+ * preview look far darker than the panel does. The result is encoded for a
+ * monitor (`viewGamma`, default 2.2) so it looks like the panel; pass 1 to get
+ * the raw levels on a 0-255 scale.
  */
-export function simulatePanel(canvas: Canvas, settings: Pick<DisplaySettings, "dimPercent" | "colorBalance" | "bitDepth">): Canvas {
+export function simulatePanel(
+  canvas: Canvas,
+  settings: Pick<DisplaySettings, "dimPercent" | "colorBalance" | "bitDepth"> & { viewGamma?: number },
+): Canvas {
   const bitDepth = settings.bitDepth ?? DEFAULT_BIT_DEPTH;
   const shift = 8 - bitDepth;
   const top = (1 << bitDepth) - 1;
-  const lit = (v: number) => Math.round(((v >> shift) * 255) / top);
+  const viewGamma = settings.viewGamma ?? 2.2;
+  const lit = (v: number) => Math.round(255 * (((v >> shift) / top) ** (1 / viewGamma)));
   const out = new Canvas(canvas.width, canvas.height);
   const cache = new Map<number, [number, number, number]>();
   for (let p = 0; p < canvas.width * canvas.height; p++) {
