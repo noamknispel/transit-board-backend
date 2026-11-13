@@ -14,6 +14,20 @@ export interface Bitmap {
  */
 const ART_COLORS = 48;
 
+/**
+ * LED panels show values almost linearly, while images are encoded for
+ * monitors, so mid-tones look washed out on the board. Raising each channel to
+ * `gamma` (about 2.2) darkens them back to roughly what the picture looks like
+ * on screen. 1 leaves the image as it is.
+ */
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.2");
+
+export function applyGamma(src: Bitmap, gamma: number): Bitmap {
+  if (gamma === 1) return src;
+  const table = Array.from({ length: 256 }, (_, v) => Math.round(255 * (v / 255) ** gamma));
+  return { ...src, data: src.data.map((v) => table[v]!) };
+}
+
 /** Box-average `src` down to size x size (the source is expected to be larger). */
 export function downscale(src: Bitmap, size: number): Bitmap {
   const out = new Uint8Array(size * size * 3);
@@ -91,10 +105,10 @@ export function quantize(bitmap: Bitmap, maxColors: number): Bitmap {
   return { width: bitmap.width, height: bitmap.height, data: out };
 }
 
-/** Decode a JPEG, shrink it to a size x size square and cut it to a small palette. */
-export function jpegToArt(jpegBytes: Uint8Array, size: number): Bitmap {
+/** Decode a JPEG, shrink it to a size x size square, darken it for the panel and cut it to a small palette. */
+export function jpegToArt(jpegBytes: Uint8Array, size: number, gamma = ART_GAMMA): Bitmap {
   const { width, height, data } = jpeg.decode(jpegBytes, { useTArray: true, formatAsRGBA: false });
-  return quantize(downscale({ width, height, data }, size), ART_COLORS);
+  return quantize(applyGamma(downscale({ width, height, data }, size), gamma), ART_COLORS);
 }
 
 /** Copy `bitmap` onto `canvas` with its top-left corner at (x, y). */

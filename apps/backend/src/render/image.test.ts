@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import jpeg from "jpeg-js";
 import { Canvas } from "./canvas.js";
-import { downscale, drawBitmap, jpegToArt, quantize, type Bitmap } from "./image.js";
+import { applyGamma, downscale, drawBitmap, jpegToArt, quantize, type Bitmap } from "./image.js";
 
 /** A width x height bitmap whose pixel (x, y) is colorAt(x, y). */
 function bitmap(width: number, height: number, colorAt: (x: number, y: number) => [number, number, number]): Bitmap {
@@ -25,6 +25,20 @@ describe("downscale", () => {
     expect(Array.from(two.data.slice(0, 3))).toEqual([0, 0, 0]);
     expect(Array.from(two.data.slice(3, 6))).toEqual([255, 255, 255]);
     expect(Array.from(downscale(src, 1).data)).toEqual([128, 128, 128]);
+  });
+});
+
+describe("applyGamma", () => {
+  test("darkens mid-tones while keeping black and white", () => {
+    const out = applyGamma(bitmap(3, 1, (x) => [[0, 0, 0], [128, 128, 128], [255, 255, 255]][x] as [number, number, number]), 2.2);
+    expect(Array.from(out.data.slice(0, 3))).toEqual([0, 0, 0]);
+    expect(out.data[3]).toBeLessThan(70); // 128 -> ~56
+    expect(Array.from(out.data.slice(6, 9))).toEqual([255, 255, 255]);
+  });
+
+  test("gamma 1 changes nothing", () => {
+    const src = bitmap(2, 1, () => [10, 100, 200]);
+    expect(applyGamma(src, 1)).toBe(src);
   });
 });
 
