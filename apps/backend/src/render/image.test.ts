@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import jpeg from "jpeg-js";
 import { Canvas } from "./canvas.js";
-import { applyGamma, decodeArt, downscale, drawBitmap, quantize, styleArt, type Bitmap } from "./image.js";
+import { applyGamma, boostSaturation, decodeArt, downscale, drawBitmap, quantize, styleArt, type Bitmap } from "./image.js";
 
 /** A width x height bitmap whose pixel (x, y) is colorAt(x, y). */
 function bitmap(width: number, height: number, colorAt: (x: number, y: number) => [number, number, number]): Bitmap {
@@ -54,6 +54,20 @@ describe("applyGamma", () => {
   test("gamma 1 changes nothing", () => {
     const src = bitmap(2, 1, () => [10, 100, 200]);
     expect(applyGamma(src, 1)).toBe(src);
+  });
+});
+
+describe("boostSaturation", () => {
+  test("pushes channels away from the brightest while keeping that peak", () => {
+    const out = Array.from(boostSaturation(bitmap(1, 1, () => [100, 80, 60]), 1.5).data);
+    expect(out).toEqual([100, 70, 40]); // 100 - (100 - c) * 1.5
+  });
+
+  test("leaves grays and the factor 1 alone, and clamps at 0", () => {
+    expect(Array.from(boostSaturation(bitmap(1, 1, () => [90, 90, 90]), 2).data)).toEqual([90, 90, 90]);
+    const src = bitmap(1, 1, () => [10, 100, 200]);
+    expect(boostSaturation(src, 1)).toBe(src);
+    expect(Array.from(boostSaturation(bitmap(1, 1, () => [200, 50, 10]), 2).data)).toEqual([200, 0, 0]);
   });
 });
 

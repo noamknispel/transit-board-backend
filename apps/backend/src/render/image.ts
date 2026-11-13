@@ -24,7 +24,7 @@ const ART_COLORS = 48;
  * brightest channel, not perceived luminance: luminance weighs red at ~20% and
  * blue at ~7%, so saturated reds and blues would be crushed to near-black.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "1.4");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "1.0");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
@@ -37,6 +37,26 @@ export function applyGamma(src: Bitmap, gamma: number): Bitmap {
     out[i] = Math.round(r * scale);
     out[i + 1] = Math.round(g * scale);
     out[i + 2] = Math.round(b * scale);
+  }
+  return { ...src, data: out };
+}
+
+/**
+ * Push each pixel's channels away from its brightest one, keeping brightness
+ * the same. The panel has only 16 levels per channel (and fewer once dimmed),
+ * so faint hues round to gray or off; a little extra saturation keeps them.
+ * 1 leaves the image as it is.
+ */
+export const ART_SATURATION = Number(process.env.SPOTIFY_ART_SATURATION || "1.3");
+
+export function boostSaturation(src: Bitmap, factor: number): Bitmap {
+  if (factor === 1) return src;
+  const out = new Uint8Array(src.data.length);
+  for (let i = 0; i < src.data.length; i += 3) {
+    const peak = Math.max(src.data[i]!, src.data[i + 1]!, src.data[i + 2]!);
+    for (let c = 0; c < 3; c++) {
+      out[i + c] = Math.max(0, Math.min(255, Math.round(peak - (peak - src.data[i + c]!) * factor)));
+    }
   }
   return { ...src, data: out };
 }
@@ -146,9 +166,15 @@ function enlarge(src: Bitmap, size: number): Bitmap {
  * Get decoded art ready for the panel: optionally blurred into blocks (the
  * average color of each cell), darkened, and cut to a small palette.
  */
-export function styleArt(art: Bitmap, style: ArtStyle, gamma = ART_GAMMA, blocks = ART_BLOCKS): Bitmap {
+export function styleArt(
+  art: Bitmap,
+  style: ArtStyle,
+  gamma = ART_GAMMA,
+  blocks = ART_BLOCKS,
+  saturation = ART_SATURATION,
+): Bitmap {
   const base = style === "pixel" ? enlarge(downscale(art, blocks), art.width) : art;
-  return quantize(applyGamma(base, gamma), ART_COLORS);
+  return quantize(boostSaturation(applyGamma(base, gamma), saturation), ART_COLORS);
 }
 
 /** Copy `bitmap` onto `canvas` with its top-left corner at (x, y). */
