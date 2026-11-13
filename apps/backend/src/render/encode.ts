@@ -51,12 +51,17 @@ export interface DisplaySettings {
 }
 
 // The firmware drives the matrix at bit_depth=4: a channel below 16 shows
-// as off. Lit channels never dim past that, so dark colors don't vanish.
+// as off. A channel that dims to at least half of that first level is held at
+// 16 so dark colors don't vanish; anything fainter goes off, so shadows (in
+// album art, say) stay black instead of all turning into the same dim gray.
 const MIN_LIT_CHANNEL = 16;
 
 function dimColor(color: number, percent: number): number {
   if (percent >= 100) return color;
-  const scale = (c: number) => (c === 0 ? 0 : Math.max(MIN_LIT_CHANNEL, Math.round((c * percent) / 100)));
+  const scale = (c: number) => {
+    const dimmed = Math.round((c * percent) / 100);
+    return dimmed >= MIN_LIT_CHANNEL ? dimmed : dimmed >= MIN_LIT_CHANNEL / 2 ? MIN_LIT_CHANNEL : 0;
+  };
   return (scale((color >> 16) & 255) << 16) | (scale((color >> 8) & 255) << 8) | scale(color & 255);
 }
 

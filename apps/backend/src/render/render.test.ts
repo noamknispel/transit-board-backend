@@ -61,6 +61,14 @@ describe("encodeDisplay", () => {
     expect(etag).not.toBe(encodeDisplay([{ canvas: c, durationSec: 4 }], settings).etag);
   });
 
+  test("dimming turns faint channels off instead of lifting them to the first level", () => {
+    const c = new Canvas(W, H);
+    c.fillRect(0, 0, 1, 1, [30, 20, 10]);
+    const { body } = encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 45 });
+    const palette = Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3));
+    expect(palette).toEqual([16, 16, 0]); // 30 -> 14 and 20 -> 9 round up to the first level; 10 -> 5 goes off
+  });
+
   test("brightness 0 in the header turns the panel off", () => {
     const { body } = encodeDisplay([{ canvas: frame(), durationSec: 4 }], { ...settings, brightness: 0 });
     expect(body[12]).toBe(0);
