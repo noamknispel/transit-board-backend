@@ -66,9 +66,10 @@ WIDTH = 128
 HEIGHT = 32
 
 # Brightness levels per color channel are 2**BIT_DEPTH. More levels look better
-# (especially dimmed) but cost RAM and refresh rate. 4 is the safe default; try 5
-# (set BIT_DEPTH in settings.toml, and DISPLAY_BIT_DEPTH to match on the backend).
-BIT_DEPTH = min(6, max(4, int(os.getenv("BIT_DEPTH", "4"))))
+# (especially dimmed) but cost RAM and refresh rate: 5 is a good balance, 6 gains
+# little and flickers sooner, 4 is the lowest. Set BIT_DEPTH in settings.toml, and
+# DISPLAY_BIT_DEPTH to match on the backend.
+BIT_DEPTH = min(6, max(4, int(os.getenv("BIT_DEPTH", "5"))))
 
 # ---------------------------------------------------------------------------
 # Matrix + Display Init
@@ -100,7 +101,7 @@ try:
     try:
         matrix = make_matrix(BIT_DEPTH)
     except Exception as e:
-        # Not enough RAM for the requested depth: fall back to the safe one.
+        # Not enough RAM for the requested depth: fall back to the lowest.
         if BIT_DEPTH == 4:
             raise
         print("bit_depth", BIT_DEPTH, "failed:", e, "- using 4")

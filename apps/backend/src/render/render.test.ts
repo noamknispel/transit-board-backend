@@ -8,7 +8,8 @@ import { ClockWidgetPlugin } from "../widgets/clock.js";
 
 const W = 128;
 const H = 32;
-const settings = { width: W, height: H, pollAfterSec: 10 };
+// The level maths below is written for 4 bits (steps of 16); the production default is 5.
+const settings = { width: W, height: H, pollAfterSec: 10, bitDepth: 4 };
 
 function litPixels(canvas: Canvas, x0 = 0, x1 = canvas.width): number {
   let n = 0;
@@ -238,15 +239,17 @@ describe("simulatePanel", () => {
 
   test("truncates to the panel's levels and shows them on a 0-255 scale", () => {
     // 4 bits: 100 >> 4 = 6 of 15 -> 102; full white stays 255
-    expect(simulatePanel(canvasOf([100, 100, 100]), {}).getPixel(0, 0)).toEqual([102, 102, 102]);
-    expect(simulatePanel(canvasOf([255, 255, 255]), {}).getPixel(0, 0)).toEqual([255, 255, 255]);
+    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 4 }).getPixel(0, 0)).toEqual([102, 102, 102]);
+    expect(simulatePanel(canvasOf([255, 255, 255]), { bitDepth: 4 }).getPixel(0, 0)).toEqual([255, 255, 255]);
     // 5 bits: 100 >> 3 = 12 of 31 -> 99
     expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 5 }).getPixel(0, 0)).toEqual([99, 99, 99]);
+    // and 5 bits is the default
+    expect(simulatePanel(canvasOf([100, 100, 100]), {}).getPixel(0, 0)).toEqual([99, 99, 99]);
   });
 
   test("applies dimming and color balance first", () => {
     // 200 * 0.5 = 100 -> nearest step of 16 = 96 -> level 6 of 15 -> 102; blue * 0.5 -> 50 -> 48 -> level 3 -> 51
-    expect(simulatePanel(canvasOf([200, 200, 200]), { dimPercent: 50, colorBalance: [1, 1, 0.5] }).getPixel(0, 0)).toEqual([102, 102, 51]);
+    expect(simulatePanel(canvasOf([200, 200, 200]), { dimPercent: 50, colorBalance: [1, 1, 0.5], bitDepth: 4 }).getPixel(0, 0)).toEqual([102, 102, 51]);
   });
 
   test("keeps black black and doesn't touch the source canvas", () => {

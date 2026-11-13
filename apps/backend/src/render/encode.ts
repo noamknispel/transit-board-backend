@@ -55,13 +55,13 @@ export interface DisplaySettings {
    */
   colorBalance?: readonly [number, number, number];
   /**
-   * The firmware's rgbmatrix bit_depth (default 4). It sets how many
+   * The firmware's rgbmatrix bit_depth (default 5). It sets how many
    * brightness levels a channel has, which is what dimmed colors are rounded to.
    */
   bitDepth?: number;
 }
 
-export const DEFAULT_BIT_DEPTH = 4;
+export const DEFAULT_BIT_DEPTH = 5;
 
 // With rgbmatrix bit_depth=4 a channel only has 16 brightness levels, 16 apart
 // on the 0-255 scale (5 bits: 32 levels, 8 apart), and anything below one level

@@ -63,7 +63,7 @@ export function autoLevels(src: Bitmap, maxGain: number): Bitmap {
 
 /**
  * Push each pixel's channels away from its brightest one, keeping brightness
- * the same. The panel has only 16 levels per channel (and fewer once dimmed),
+ * the same. The panel has only 32 levels per channel (and fewer once dimmed),
  * so faint hues round to gray or off; a little extra saturation keeps them.
  * 1 leaves the image as it is.
  */
