@@ -40,7 +40,7 @@ export interface DisplaySettingsUpdate {
 }
 
 // Widget types
-export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown';
+export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify';
 
 
 export interface BaseWidget {
@@ -101,14 +101,32 @@ export interface CountdownWidget extends BaseWidget {
   };
 }
 
-export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget;
+export interface SpotifyWidget extends BaseWidget {
+  type: 'spotify';
+  config: {
+    /** Title color; the artist is always gray */
+    color?: string;
+    showProgress?: boolean;
+  };
+}
+
+/** Whether the backend's one Spotify account is set up (never includes tokens) */
+export interface SpotifyStatus {
+  /** SPOTIFY_CLIENT_ID is set on the backend */
+  configured: boolean;
+  connected: boolean;
+  displayName: string | null;
+}
+
+export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget;
 
 // Widget config types for creation/update
 export type WidgetConfig = 
   | TransitWidget['config']
   | MessageWidget['config']
   | ClockWidget['config']
-  | CountdownWidget['config'];
+  | CountdownWidget['config']
+  | SpotifyWidget['config'];
 
 export interface CreateWidgetRequest {
   type: WidgetType;

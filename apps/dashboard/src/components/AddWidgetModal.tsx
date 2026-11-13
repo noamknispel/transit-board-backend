@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, TimeWindow, WidgetType } from '../types';
+import type { CreateWidgetRequest, SpotifyStatus, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, TimeWindow, WidgetType } from '../types';
 import { browserTimezone, describeSchedule, toLocalInput } from '../schedule';
 import { TimeWindowFields } from './TimeWindowFields';
 
@@ -76,6 +76,11 @@ export function AddWidgetModal({
   // datetime-local value, in the browser's timezone
   const [countdownTarget, setCountdownTarget] = useState('');
 
+  const [spotifyColor, setSpotifyColor] = useState('#FFFFFF');
+  const [spotifyShowProgress, setSpotifyShowProgress] = useState(true);
+  // null until loaded (or if the status request failed)
+  const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
+
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
   const [messageScroll, setMessageScroll] = useState(true);
@@ -113,6 +118,21 @@ export function AddWidgetModal({
 
   const isLastStep = stepIndex === steps.length - 1;
 
+  // Check the account whenever Now Playing is picked, so reopening after
+  // running the connect command shows the fresh state.
+  useEffect(() => {
+    if (!isOpen || widgetType !== 'spotify') return;
+    let cancelled = false;
+    setSpotifyStatus(null);
+    api.getSpotifyStatus().then(
+      (status) => !cancelled && setSpotifyStatus(status),
+      () => !cancelled && setSpotifyStatus({ configured: false, connected: false, displayName: null }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, widgetType]);
+
   useEffect(() => {
     if (editWidget) {
       const config = (editWidget.config || {}) as Record<string, any>;
@@ -146,6 +166,10 @@ export function AddWidgetModal({
         case 'transit':
           setShowOriginInitials(typeof config.showOriginInitials === 'boolean' ? config.showOriginInitials : false);
           break;
+        case 'spotify':
+          setSpotifyColor(typeof config.color === 'string' ? config.color : '#FFFFFF');
+          setSpotifyShowProgress(typeof config.showProgress === 'boolean' ? config.showProgress : true);
+          break;
         case 'countdown':
           setCountdownMessage(typeof config.message === 'string' ? config.message : '');
           setCountdownColor(typeof config.color === 'string' ? config.color : '#FFB000');
@@ -165,6 +189,8 @@ export function AddWidgetModal({
       setCountdownMessage('');
       setCountdownColor('#FFB000');
       setCountdownTarget('');
+      setSpotifyColor('#FFFFFF');
+      setSpotifyShowProgress(true);
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -309,6 +335,8 @@ export function AddWidgetModal({
       case 'transit':
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
+      case 'spotify':
+        return { color: spotifyColor, showProgress: spotifyShowProgress };
       case 'countdown':
         return {
           message: countdownMessage.trim(),
@@ -348,6 +376,10 @@ export function AddWidgetModal({
         const target = Date.parse(countdownTarget);
         return countdownMessage.trim().length > 0 && !Number.isNaN(target) && target > Date.now();
       }
+      if (widgetType === 'spotify') {
+        // Editing an existing widget never needs the account; adding one does.
+        return Boolean(editWidget) || Boolean(spotifyStatus?.connected);
+      }
       if (widgetType === 'clock') {
         const hasTimezone = (clockTimezone || '').trim().length > 0;
         const hasLocation = !clockShowWeather || (clockLatitude !== null && clockLongitude !== null);
@@ -381,6 +413,7 @@ export function AddWidgetModal({
     { id: 'clock', title: 'Clock', description: 'Display time, date, and timezone details.', label: 'CLK' },
     { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
     { id: 'countdown', title: 'Countdown', description: 'A message and the time left until a date.', label: 'CDN' },
+    { id: 'spotify', title: 'Now Playing', description: 'Album art and track from Spotify, only while playing.', label: 'SPT' },
   ];
 
   return (
@@ -477,6 +510,57 @@ export function AddWidgetModal({
                     />
                     Enable scrolling
                   </label>
+                </>
+              )}
+
+              {widgetType === 'spotify' && (
+                <>
+                  {spotifyStatus?.connected ? (
+                    <p className="mb-4 text-sm text-ops-100">
+                      Connected{spotifyStatus.displayName ? ` as ${spotifyStatus.displayName}` : ''}.
+                    </p>
+                  ) : (
+                    <div className="mb-4 rounded-lg border border-ops-700 bg-ops-950/65 p-3 text-sm text-ops-100">
+                      <p className="mb-1 font-semibold">
+                        {spotifyStatus === null ? 'Checking Spotify…' : 'Spotify isn\'t connected yet.'}
+                      </p>
+                      {spotifyStatus !== null && (
+                        <p className="text-ops-300">
+                          {spotifyStatus.configured
+                            ? <>On the backend, run <code>bun run spotify:connect</code> and approve access, then reopen this dialog.</>
+                            : <>Set <code>SPOTIFY_CLIENT_ID</code> in the backend&apos;s <code>.env</code>, restart it, then run <code>bun run spotify:connect</code>.</>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <label className="tb-label">Title Color</label>
+                  <div className="mb-4 flex gap-2">
+                    <input
+                      type="color"
+                      value={spotifyColor}
+                      onChange={(e) => setSpotifyColor(e.target.value)}
+                      className="h-10 w-14 rounded border border-ops-600 bg-ops-900"
+                    />
+                    <input
+                      type="text"
+                      value={spotifyColor}
+                      onChange={(e) => setSpotifyColor(e.target.value)}
+                      className="tb-input"
+                      placeholder="#FFFFFF"
+                    />
+                  </div>
+                  <label className="tb-check-label mb-4">
+                    <input
+                      type="checkbox"
+                      className="tb-checkbox"
+                      checked={spotifyShowProgress}
+                      onChange={(e) => setSpotifyShowProgress(e.target.checked)}
+                    />
+                    Show progress bar
+                  </label>
+                  <p className="text-xs text-ops-300">
+                    Leaves the rotation while nothing is playing. Long titles are cut short.
+                  </p>
                 </>
               )}
 
@@ -807,6 +891,12 @@ export function AddWidgetModal({
                 <p><strong>Show only:</strong> {showOnly ? 'On' : 'Off'}</p>
                 <p><strong>Schedule:</strong> {scheduleEnabled ? describeSchedule(buildSchedule()!) : 'Always on'}</p>
               </div>
+              {widgetType === 'spotify' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Title color:</strong> {spotifyColor}</p>
+                  <p><strong>Progress bar:</strong> {spotifyShowProgress ? 'On' : 'Off'}</p>
+                </div>
+              )}
               {widgetType === 'countdown' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Message:</strong> {countdownMessage || '(empty)'}</p>

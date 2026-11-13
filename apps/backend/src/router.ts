@@ -2,6 +2,7 @@ import * as deviceController from "./controllers/device.controller";
 import * as widgetController from "./controllers/widget.controller";
 import * as displayController from "./controllers/display.controller";
 import * as logsController from "./controllers/logs.controller";
+import * as spotifyController from "./controllers/spotify.controller";
 
 export const router = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -74,6 +75,11 @@ export const router = async (req: Request): Promise<Response> => {
   if (previewMatch && method === "GET") {
     const deviceId = previewMatch[1];
     return displayController.getPreview(req, deviceId);
+  }
+
+  // GET /spotify/status - Whether a Spotify account is connected
+  if (pathname === "/spotify/status" && method === "GET") {
+    return spotifyController.getStatus();
   }
 
   // GET /logs - Recent microcontroller serial output

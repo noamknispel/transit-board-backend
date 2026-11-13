@@ -1,4 +1,4 @@
-import type { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
+import type { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription, SpotifyStatus } from '../types';
 
 // Use relative URLs in production (served by backend), or VITE_API_URL for local dev
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -41,6 +41,10 @@ class ApiClient {
       body: JSON.stringify(update),
     });
     return response.device;
+  }
+
+  async getSpotifyStatus(): Promise<SpotifyStatus> {
+    return this.request<SpotifyStatus>('/spotify/status');
   }
 
   // Widget endpoints

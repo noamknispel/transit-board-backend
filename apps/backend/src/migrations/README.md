@@ -35,6 +35,7 @@ This directory contains SQL migration files that define the database schema.
 - `006_widget_show_only.sql` - Adds `showOnly` to widgets
 - `007_widget_schedule.sql` - Adds an optional `schedule` (JSON time window) to widgets
 - `008_display_off_schedule.sql` - Replaces the single display schedule with a list of off windows (`offSchedule`)
+- `009_spotify.sql` - Adds `spotify_auth`, the single connected Spotify account for the Now Playing widget
 
 ## Notes
 

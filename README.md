@@ -14,7 +14,7 @@ transit-board-backend/
 
 ## Features
 
-- **Widget System**: Transit arrivals, custom messages, and clock displays
+- **Widget System**: Transit arrivals, custom messages, clock, countdown, and Spotify "Now Playing" displays
 - **React Dashboard**: Web UI for managing devices and widgets with drag-and-drop reordering
 - **Real-time Data**: Live MTA subway arrivals via GTFS-RT feeds
 - **Multi-Device Support**: Manage multiple transit boards from one backend
@@ -40,6 +40,15 @@ open http://localhost:3010/dashboard/
 ### Production Deployment (Raspberry Pi)
 
 See [Deployment Guide](#deployment-to-raspberry-pi) below.
+
+## Spotify "Now Playing" widget
+
+Shows album art, track and artist while something is playing; it drops out of the rotation when paused. One Spotify account is shared by the whole backend.
+
+1. Create an app at <https://developer.spotify.com/dashboard> and register `http://127.0.0.1:8888/callback` as a redirect URI.
+2. Put the app's client ID in `apps/backend/.env` as `SPOTIFY_CLIENT_ID` (no client secret is needed).
+3. Run `bun run spotify:connect` from `apps/backend` and approve access. If your browser is on another machine than the backend, the callback page won't load: paste the URL from the address bar back into the terminal.
+4. Add a "Now Playing" widget from the dashboard.
 
 ## Deployment to Raspberry Pi
 

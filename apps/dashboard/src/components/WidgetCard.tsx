@@ -43,6 +43,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return 'CLK';
       case 'countdown':
         return 'CDN';
+      case 'spotify':
+        return 'SPT';
       default:
         return 'WGT';
     }
@@ -58,6 +60,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return `${widget.config.format.toUpperCase()} ${widget.config.showDate ? '+ Date' : ''}`;
       case 'countdown':
         return `${widget.config.message} · ${countdownStatus(widget.config, now)}`;
+      case 'spotify':
+        return 'Now playing on Spotify · hidden while paused';
       default:
         return 'Unknown widget';
     }
