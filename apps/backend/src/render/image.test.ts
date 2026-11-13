@@ -99,7 +99,7 @@ describe("styleArt", () => {
   });
 
   test("pixel turns the art into 2x2 blocks of one color", () => {
-    const out = styleArt(busy, "pixel", 1);
+    const out = styleArt(busy, "pixel", 1, 16);
     expect(out.width).toBe(32);
     const px = (x: number, y: number) => Array.from(out.data.slice((y * 32 + x) * 3, (y * 32 + x) * 3 + 3));
     for (let by = 0; by < 32; by += 2)
@@ -110,6 +110,13 @@ describe("styleArt", () => {
       }
     // and neighbouring blocks still differ
     expect(px(0, 0)).not.toEqual(px(30, 30));
+  });
+
+  test("fewer blocks make bigger blocks", () => {
+    const out = styleArt(busy, "pixel", 1, 8);
+    const px = (x: number, y: number) => Array.from(out.data.slice((y * 32 + x) * 3, (y * 32 + x) * 3 + 3));
+    expect(px(3, 3)).toEqual(px(0, 0)); // a 4x4 block
+    expect(px(4, 0)).not.toEqual(px(0, 0));
   });
 
   test("both styles stay within the palette budget", () => {

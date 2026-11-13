@@ -127,8 +127,8 @@ export function decodeArt(jpegBytes: Uint8Array, size: number): Bitmap {
 /** "detail" keeps every pixel; "pixel" averages the art into chunky blocks. */
 export type ArtStyle = "pixel" | "detail";
 
-/** The "pixel" style is this many blocks across, so each covers size / ART_BLOCKS pixels. */
-const ART_BLOCKS = 16;
+/** The "pixel" style is this many blocks across (8 gives 4x4-pixel blocks on the 32px art, 16 gives 2x2). */
+export const ART_BLOCKS = Math.max(2, Math.min(32, Number(process.env.SPOTIFY_ART_BLOCKS || "8")));
 
 /** Repeat each pixel of `src` so it fills size x size (size must be a multiple of src.width). */
 function enlarge(src: Bitmap, size: number): Bitmap {
@@ -146,8 +146,8 @@ function enlarge(src: Bitmap, size: number): Bitmap {
  * Get decoded art ready for the panel: optionally blurred into blocks (the
  * average color of each cell), darkened, and cut to a small palette.
  */
-export function styleArt(art: Bitmap, style: ArtStyle, gamma = ART_GAMMA): Bitmap {
-  const base = style === "pixel" ? enlarge(downscale(art, ART_BLOCKS), art.width) : art;
+export function styleArt(art: Bitmap, style: ArtStyle, gamma = ART_GAMMA, blocks = ART_BLOCKS): Bitmap {
+  const base = style === "pixel" ? enlarge(downscale(art, blocks), art.width) : art;
   return quantize(applyGamma(base, gamma), ART_COLORS);
 }
 
