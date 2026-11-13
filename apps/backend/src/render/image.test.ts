@@ -44,6 +44,13 @@ describe("applyGamma", () => {
     expect(b / r).toBeCloseTo(80 / 200, 1);
   });
 
+  test("does not crush saturated reds and blues", () => {
+    const red = applyGamma(bitmap(1, 1, () => [200, 20, 20]), 2.0).data;
+    const blue = applyGamma(bitmap(1, 1, () => [20, 20, 200]), 2.0).data;
+    expect(red[0]).toBeGreaterThan(130); // 200 -> ~157
+    expect(blue[2]).toBeGreaterThan(130);
+  });
+
   test("gamma 1 changes nothing", () => {
     const src = bitmap(2, 1, () => [10, 100, 200]);
     expect(applyGamma(src, 1)).toBe(src);

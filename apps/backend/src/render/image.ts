@@ -20,7 +20,9 @@ const ART_COLORS = 48;
  * `gamma` darkens them back toward what the picture looks like on screen; 1
  * leaves the image as it is. Only the brightness is curved: each pixel keeps
  * its channel ratios, because gamma on every channel separately also
- * boosts saturation and the colors come out garish.
+ * boosts saturation and the colors come out garish. "Brightness" is the
+ * brightest channel, not perceived luminance: luminance weighs red at ~20% and
+ * blue at ~7%, so saturated reds and blues would be crushed to near-black.
  */
 export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.0");
 
@@ -29,9 +31,9 @@ export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   const out = new Uint8Array(src.data.length);
   for (let i = 0; i < src.data.length; i += 3) {
     const r = src.data[i]!, g = src.data[i + 1]!, b = src.data[i + 2]!;
-    const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    // luma <= 1 so the scale is <= 1: channels only shrink, never clip
-    const scale = luma > 0 ? luma ** (gamma - 1) : 0;
+    const peak = Math.max(r, g, b) / 255;
+    // peak <= 1 so the scale is <= 1: channels only shrink, never clip
+    const scale = peak > 0 ? peak ** (gamma - 1) : 0;
     out[i] = Math.round(r * scale);
     out[i + 1] = Math.round(g * scale);
     out[i + 2] = Math.round(b * scale);
