@@ -24,7 +24,7 @@ const ART_COLORS = 48;
  * brightest channel, not perceived luminance: luminance weighs red at ~20% and
  * blue at ~7%, so saturated reds and blues would be crushed to near-black.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "0.9");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "1.2");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
@@ -48,7 +48,7 @@ export function applyGamma(src: Bitmap, gamma: number): Bitmap {
  * stray white speck doesn't stop a dark cover from being brightened). Never
  * darkens and never gains more than `maxGain`; 0 turns it off.
  */
-export const ART_AUTOLEVEL_MAX_GAIN = Number(process.env.SPOTIFY_ART_AUTOLEVEL || "2.5");
+export const ART_AUTOLEVEL_MAX_GAIN = Number(process.env.SPOTIFY_ART_AUTOLEVEL || "0");
 
 export function autoLevels(src: Bitmap, maxGain: number): Bitmap {
   if (maxGain <= 1) return src;
