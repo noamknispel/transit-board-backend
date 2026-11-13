@@ -50,18 +50,17 @@ export interface DisplaySettings {
   dimPercent?: number;
 }
 
-// The firmware drives the matrix at bit_depth=4: a channel below 16 shows
-// as off. A channel that dims to at least half of that first level is held at
-// 16 so dark colors don't vanish; anything fainter goes off, so shadows (in
-// album art, say) stay black instead of all turning into the same dim gray.
-const MIN_LIT_CHANNEL = 16;
+// The firmware drives the matrix at bit_depth=4: a channel only has 16
+// brightness levels, 16 apart, and anything below 16 shows as off. Each dimmed
+// channel is rounded to the nearest level rather than left for the panel to
+// truncate or lifted to the first level. That keeps the balance between
+// channels (lifting only the weak ones turns dark reds purple) and lets faint
+// shadows go fully off instead of all becoming the same dim gray.
+const LEVEL = 16;
 
 function dimColor(color: number, percent: number): number {
   if (percent >= 100) return color;
-  const scale = (c: number) => {
-    const dimmed = Math.round((c * percent) / 100);
-    return dimmed >= MIN_LIT_CHANNEL ? dimmed : dimmed >= MIN_LIT_CHANNEL / 2 ? MIN_LIT_CHANNEL : 0;
-  };
+  const scale = (c: number) => Math.min(255, Math.round(((c * percent) / 100) / LEVEL) * LEVEL);
   return (scale((color >> 16) & 255) << 16) | (scale((color >> 8) & 255) << 8) | scale(color & 255);
 }
 

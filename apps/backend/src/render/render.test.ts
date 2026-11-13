@@ -51,22 +51,30 @@ describe("encodeDisplay", () => {
     expect(body.length).toBe(HEADER_LENGTH + 4 + 6 + W * H);
   });
 
-  test("dims the palette but keeps lit channels visible at bit_depth 4", () => {
+  test("dims the palette, rounding each channel to a level the panel can show", () => {
     const c = new Canvas(W, H);
     c.fillRect(0, 0, 1, 1, [255, 100, 0]);
     const { body, etag } = encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 10 });
     const palette = Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3));
-    expect(palette).toEqual([26, 16, 0]); // 255 -> 26, 100 -> 10 clamped up to 16, 0 stays off
+    expect(palette).toEqual([32, 16, 0]); // 255 -> 26 -> 32, 100 -> 10 -> 16, 0 stays off
     // Pixels are untouched, only the palette changes, and so does the etag.
     expect(etag).not.toBe(encodeDisplay([{ canvas: c, durationSec: 4 }], settings).etag);
   });
 
-  test("dimming turns faint channels off instead of lifting them to the first level", () => {
+  test("dimming turns faint channels off instead of boosting them", () => {
     const c = new Canvas(W, H);
     c.fillRect(0, 0, 1, 1, [30, 20, 10]);
     const { body } = encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 45 });
     const palette = Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3));
-    expect(palette).toEqual([16, 16, 0]); // 30 -> 14 and 20 -> 9 round up to the first level; 10 -> 5 goes off
+    expect(palette).toEqual([16, 16, 0]); // 30 -> 14 -> 16, 20 -> 9 -> 16, 10 -> 5 -> 0
+  });
+
+  test("dimming keeps a dark red red instead of tinting it purple", () => {
+    const c = new Canvas(W, H);
+    c.fillRect(0, 0, 1, 1, [70, 12, 14]);
+    const { body } = encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 45 });
+    // 70,12,14 -> 31,5,6: the faint green and blue go off rather than being lifted to a visible level
+    expect(Array.from(body.slice(HEADER_LENGTH + 4, HEADER_LENGTH + 4 + 3))).toEqual([32, 0, 0]);
   });
 
   test("brightness 0 in the header turns the panel off", () => {
