@@ -118,10 +118,37 @@ export function quantize(bitmap: Bitmap, maxColors: number): Bitmap {
   return { width: bitmap.width, height: bitmap.height, data: out };
 }
 
-/** Decode a JPEG, shrink it to a size x size square, darken it for the panel and cut it to a small palette. */
-export function jpegToArt(jpegBytes: Uint8Array, size: number, gamma = ART_GAMMA): Bitmap {
+/** Decode a JPEG and shrink it to a size x size square. */
+export function decodeArt(jpegBytes: Uint8Array, size: number): Bitmap {
   const { width, height, data } = jpeg.decode(jpegBytes, { useTArray: true, formatAsRGBA: false });
-  return quantize(applyGamma(downscale({ width, height, data }, size), gamma), ART_COLORS);
+  return downscale({ width, height, data }, size);
+}
+
+/** "detail" keeps every pixel; "pixel" averages the art into chunky blocks. */
+export type ArtStyle = "pixel" | "detail";
+
+/** The "pixel" style is this many blocks across, so each covers size / ART_BLOCKS pixels. */
+const ART_BLOCKS = 16;
+
+/** Repeat each pixel of `src` so it fills size x size (size must be a multiple of src.width). */
+function enlarge(src: Bitmap, size: number): Bitmap {
+  const out = new Uint8Array(size * size * 3);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (Math.floor((y * src.height) / size) * src.width + Math.floor((x * src.width) / size)) * 3;
+      out.set(src.data.subarray(i, i + 3), (y * size + x) * 3);
+    }
+  }
+  return { width: size, height: size, data: out };
+}
+
+/**
+ * Get decoded art ready for the panel: optionally blurred into blocks (the
+ * average color of each cell), darkened, and cut to a small palette.
+ */
+export function styleArt(art: Bitmap, style: ArtStyle, gamma = ART_GAMMA): Bitmap {
+  const base = style === "pixel" ? enlarge(downscale(art, ART_BLOCKS), art.width) : art;
+  return quantize(applyGamma(base, gamma), ART_COLORS);
 }
 
 /** Copy `bitmap` onto `canvas` with its top-left corner at (x, y). */

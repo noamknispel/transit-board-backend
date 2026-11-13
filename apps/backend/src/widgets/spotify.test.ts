@@ -93,7 +93,10 @@ describe("spotify widget", () => {
     const art = { width: 32, height: 32, data: new Uint8Array(32 * 32 * 3).fill(200) };
     (SpotifyService as any).art.set("art-url", art);
     const [canvas] = spotify.render({ ...playing, artUrl: "art-url", progressMs: 240_000 }, ctx);
-    expect(canvas!.getPixel(31, 0)).toEqual([200, 200, 200]); // the art, not the bar
+    const [r, g, b] = canvas!.getPixel(31, 0);
+    expect(r).toBeGreaterThan(0);
+    expect(g).toBe(r); // gray art, not the green bar
+    expect(b).toBe(r);
     expect(canvas!.getPixel(32, 0)[1]).toBeGreaterThan(0); // bar starts right after it
     expect(canvas!.getPixel(ctx.width - 1, 0)[1]).toBeGreaterThan(0); // and reaches the last column
   });
@@ -113,6 +116,7 @@ describe("spotify widget", () => {
   test("validates config", () => {
     expect(() => spotify.validateConfig({ showProgress: "yes" })).toThrow();
     expect(() => spotify.validateConfig({ progressPosition: "middle" })).toThrow();
+    expect(() => spotify.validateConfig({ artStyle: "blurry" })).toThrow();
     expect(spotify.validateConfig({})).toBe(true);
   });
 });

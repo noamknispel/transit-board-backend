@@ -109,6 +109,8 @@ export interface SpotifyWidget extends BaseWidget {
     showProgress?: boolean;
     /** Edge of the board the progress bar sits on; defaults to top */
     progressPosition?: 'top' | 'bottom';
+    /** How album art is drawn: chunky blocks (default) or every pixel */
+    artStyle?: 'pixel' | 'detail';
   };
 }
 

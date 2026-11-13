@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import jpeg from "jpeg-js";
 import { Canvas } from "./canvas.js";
-import { applyGamma, downscale, drawBitmap, jpegToArt, quantize, type Bitmap } from "./image.js";
+import { applyGamma, decodeArt, downscale, drawBitmap, quantize, styleArt, type Bitmap } from "./image.js";
 
 /** A width x height bitmap whose pixel (x, y) is colorAt(x, y). */
 function bitmap(width: number, height: number, colorAt: (x: number, y: number) => [number, number, number]): Bitmap {
@@ -72,19 +72,49 @@ describe("quantize", () => {
   });
 });
 
-describe("jpegToArt", () => {
-  test("decodes a JPEG to the requested size with a small palette", () => {
+describe("decodeArt", () => {
+  test("decodes a JPEG and shrinks it to the requested size", () => {
     const w = 64;
     const raw = new Uint8Array(w * w * 4);
     for (let i = 0; i < w * w; i++) raw.set([(i % w) * 4, 80, 255 - (i % w) * 4, 255], i * 4);
     const encoded = jpeg.encode({ data: raw, width: w, height: w }, 90).data;
 
-    const art = jpegToArt(new Uint8Array(encoded), 32);
+    const art = decodeArt(new Uint8Array(encoded), 32);
     expect(art.width).toBe(32);
     expect(art.height).toBe(32);
-    expect(distinctColors(art)).toBeLessThanOrEqual(48);
     // Red ramps up left to right, blue ramps down.
     expect(art.data[0]).toBeLessThan(art.data[31 * 3]!);
+  });
+});
+
+describe("styleArt", () => {
+  const busy = bitmap(32, 32, (x, y) => [x * 8, y * 8, (x * y) % 256]);
+
+  test("detail keeps pixel-level variation, pixel averages it away", () => {
+    const checker = bitmap(32, 32, (x, y) => ((x + y) % 2 ? [255, 255, 255] : [0, 0, 0]));
+    const first = (b: Bitmap) => [b.data[0], b.data[3]];
+    expect(first(styleArt(checker, "detail", 1))).toEqual([0, 255]);
+    const [a, b] = first(styleArt(checker, "pixel", 1));
+    expect(a).toBe(b); // each 2x2 block is the same mid-gray
+  });
+
+  test("pixel turns the art into 2x2 blocks of one color", () => {
+    const out = styleArt(busy, "pixel", 1);
+    expect(out.width).toBe(32);
+    const px = (x: number, y: number) => Array.from(out.data.slice((y * 32 + x) * 3, (y * 32 + x) * 3 + 3));
+    for (let by = 0; by < 32; by += 2)
+      for (let bx = 0; bx < 32; bx += 2) {
+        expect(px(bx + 1, by)).toEqual(px(bx, by));
+        expect(px(bx, by + 1)).toEqual(px(bx, by));
+        expect(px(bx + 1, by + 1)).toEqual(px(bx, by));
+      }
+    // and neighbouring blocks still differ
+    expect(px(0, 0)).not.toEqual(px(30, 30));
+  });
+
+  test("both styles stay within the palette budget", () => {
+    expect(distinctColors(styleArt(busy, "detail"))).toBeLessThanOrEqual(48);
+    expect(distinctColors(styleArt(busy, "pixel"))).toBeLessThanOrEqual(48);
   });
 });
 

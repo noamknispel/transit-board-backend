@@ -1,7 +1,7 @@
 import { WidgetPlugin } from "./base.js";
 import { Canvas, hexToRgb, parseColor, WHITE } from "../render/canvas.js";
 import { CHAR_WIDTH } from "../render/font.js";
-import { drawBitmap } from "../render/image.js";
+import { drawBitmap, styleArt, type ArtStyle } from "../render/image.js";
 import { rowCenter, type RenderContext } from "../render/layout.js";
 import { ART_SIZE, SpotifyService } from "../services/spotify.js";
 
@@ -45,6 +45,7 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     color: "#FFFFFF",
     showProgress: true,
     progressPosition: "top",
+    artStyle: "pixel",
   };
 
   private service = new SpotifyService();
@@ -66,6 +67,10 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       throw new Error("progressPosition must be 'top' or 'bottom'");
     }
 
+    if (config.artStyle !== undefined && !["pixel", "detail"].includes(config.artStyle)) {
+      throw new Error("artStyle must be 'pixel' or 'detail'");
+    }
+
     return true;
   }
 
@@ -75,9 +80,10 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     const color = config.color || this.defaultConfig.color;
     const showProgress = config.showProgress ?? this.defaultConfig.showProgress;
     const progressPosition = config.progressPosition === "bottom" ? "bottom" : "top";
+    const artStyle: ArtStyle = config.artStyle === "detail" ? "detail" : "pixel";
 
     const { nowPlaying, fetchedAt } = await this.service.getNowPlaying();
-    if (!nowPlaying) return { playing: false, color, showProgress, progressPosition };
+    if (!nowPlaying) return { playing: false, color, showProgress, progressPosition, artStyle };
 
     return {
       playing: true,
@@ -90,6 +96,7 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       color,
       showProgress,
       progressPosition,
+      artStyle,
     };
   }
 
@@ -100,7 +107,8 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
   render(data: any, ctx: RenderContext): Canvas[] {
     const canvas = new Canvas(ctx.width, ctx.height);
 
-    const art = SpotifyService.getArt(data.artUrl);
+    const decoded = SpotifyService.getArt(data.artUrl);
+    const art = decoded && styleArt(decoded, data.artStyle === "detail" ? "detail" : "pixel");
     if (art) drawBitmap(canvas, art, 0, Math.floor((ctx.height - ART_SIZE) / 2));
 
     const textX = art ? ART_SIZE + TEXT_GAP : 2;

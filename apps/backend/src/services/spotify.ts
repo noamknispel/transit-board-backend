@@ -1,5 +1,5 @@
 import { SpotifyAuthModel } from "../models/spotify-auth.js";
-import { jpegToArt, type Bitmap } from "../render/image.js";
+import { decodeArt, type Bitmap } from "../render/image.js";
 
 export const ART_SIZE = 32;
 
@@ -68,7 +68,7 @@ export class SpotifyService {
     return { connected: !!auth, displayName: auth?.displayName ?? null };
   }
 
-  /** Album art already decoded for `url`; fetched ahead of time by getNowPlaying(). */
+  /** Album art decoded and shrunk for `url`; fetched ahead of time by getNowPlaying(). */
   static getArt(url: string | null | undefined): Bitmap | null {
     return (url && SpotifyService.art.get(url)) || null;
   }
@@ -128,7 +128,7 @@ export class SpotifyService {
         try {
           const response = await this.request(url, {});
           if (!response.ok) throw new Error(`Album art HTTP ${response.status}`);
-          const art = jpegToArt(new Uint8Array(await response.arrayBuffer()), ART_SIZE);
+          const art = decodeArt(new Uint8Array(await response.arrayBuffer()), ART_SIZE);
           // Oldest first out: tracks only matter while they're playing.
           if (SpotifyService.art.size >= SpotifyService.MAX_ART) {
             SpotifyService.art.delete(SpotifyService.art.keys().next().value!);

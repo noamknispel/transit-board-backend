@@ -79,6 +79,7 @@ export function AddWidgetModal({
   const [spotifyColor, setSpotifyColor] = useState('#FFFFFF');
   const [spotifyShowProgress, setSpotifyShowProgress] = useState(true);
   const [spotifyProgressPosition, setSpotifyProgressPosition] = useState<'top' | 'bottom'>('top');
+  const [spotifyArtStyle, setSpotifyArtStyle] = useState<'pixel' | 'detail'>('pixel');
   // null until loaded (or if the status request failed)
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
 
@@ -171,6 +172,7 @@ export function AddWidgetModal({
           setSpotifyColor(typeof config.color === 'string' ? config.color : '#FFFFFF');
           setSpotifyShowProgress(typeof config.showProgress === 'boolean' ? config.showProgress : true);
           setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
+          setSpotifyArtStyle(config.artStyle === 'detail' ? 'detail' : 'pixel');
           break;
         case 'countdown':
           setCountdownMessage(typeof config.message === 'string' ? config.message : '');
@@ -194,6 +196,7 @@ export function AddWidgetModal({
       setSpotifyColor('#FFFFFF');
       setSpotifyShowProgress(true);
       setSpotifyProgressPosition('top');
+      setSpotifyArtStyle('pixel');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -339,7 +342,7 @@ export function AddWidgetModal({
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
       case 'spotify':
-        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition };
+        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, artStyle: spotifyArtStyle };
       case 'countdown':
         return {
           message: countdownMessage.trim(),
@@ -536,6 +539,15 @@ export function AddWidgetModal({
                       )}
                     </div>
                   )}
+                  <label className="tb-label">Album Art Style</label>
+                  <select
+                    value={spotifyArtStyle}
+                    onChange={(e) => setSpotifyArtStyle(e.target.value === 'detail' ? 'detail' : 'pixel')}
+                    className="tb-input mb-4"
+                  >
+                    <option value="pixel">Pixel (chunky blocks)</option>
+                    <option value="detail">Detail (sharper)</option>
+                  </select>
                   <label className="tb-label">Title Color</label>
                   <div className="mb-4 flex gap-2">
                     <input
@@ -910,6 +922,7 @@ export function AddWidgetModal({
               {widgetType === 'spotify' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Title color:</strong> {spotifyColor}</p>
+                  <p><strong>Album art:</strong> {spotifyArtStyle === 'pixel' ? 'Pixel' : 'Detail'}</p>
                   <p><strong>Progress bar:</strong> {spotifyShowProgress ? `On (${spotifyProgressPosition})` : 'Off'}</p>
                 </div>
               )}
