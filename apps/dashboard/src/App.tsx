@@ -7,6 +7,7 @@ import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
 import { DeviceLogs } from './components/DeviceLogs';
 import { DisplayControls } from './components/DisplayControls';
+import { BoardPreview } from './components/BoardPreview';
 
 const LAST_DEVICE_STORAGE_KEY = 'transit-board:last-selected-device-id';
 
@@ -287,6 +288,10 @@ function App() {
 
         {selectedDevice && (
           <DisplayControls device={selectedDevice} onSave={handleSaveDisplaySettings} />
+        )}
+
+        {selectedDevice && (
+          <BoardPreview device={selectedDevice} />
         )}
 
         {selectedDeviceId && (

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BLACK, Canvas, parseColor, WHITE } from "./canvas.js";
-import { encodeDisplay, HEADER_LENGTH } from "./encode.js";
+import { encodeDisplay, HEADER_LENGTH, simulatePanel } from "./encode.js";
 import { CHAR_WIDTH, measureText } from "./font.js";
 import { encodePng } from "./png.js";
 import { MessageWidgetPlugin } from "../widgets/message.js";
@@ -87,6 +87,16 @@ describe("encodeDisplay", () => {
     expect(first({ dimPercent: 50, colorBalance: [1, 0.5, 0.25] })).toEqual([96, 48, 32]);
     expect(first({ colorBalance: [1, 1, 1] })).toEqual([200, 200, 200]);
     expect(first({ colorBalance: [2, 1, 1] })[0]).toBe(255); // clamps
+  });
+
+  test("more bit depth means finer dimmed levels", () => {
+    const c = new Canvas(W, H);
+    c.fillRect(0, 0, 1, 1, [100, 100, 100]);
+    const first = (bitDepth: number) =>
+      encodeDisplay([{ canvas: c, durationSec: 4 }], { ...settings, dimPercent: 50, bitDepth }).body[HEADER_LENGTH + 4];
+    expect(first(4)).toBe(48); // 50 -> nearest of steps of 16
+    expect(first(5)).toBe(48); // 50 -> steps of 8 -> 48
+    expect(first(6)).toBe(52); // 50 -> steps of 4 -> 52
   });
 
   test("brightness 0 in the header turns the panel off", () => {
@@ -216,5 +226,33 @@ describe("encodePng", () => {
     const view = new DataView(png.buffer, png.byteOffset);
     expect(view.getUint32(16)).toBe(W * 4);
     expect(view.getUint32(20)).toBe(H * 4);
+  });
+});
+
+describe("simulatePanel", () => {
+  const canvasOf = (rgb: [number, number, number]) => {
+    const c = new Canvas(2, 1);
+    c.fillRect(0, 0, 2, 1, rgb);
+    return c;
+  };
+
+  test("truncates to the panel's levels and shows them on a 0-255 scale", () => {
+    // 4 bits: 100 >> 4 = 6 of 15 -> 102; full white stays 255
+    expect(simulatePanel(canvasOf([100, 100, 100]), {}).getPixel(0, 0)).toEqual([102, 102, 102]);
+    expect(simulatePanel(canvasOf([255, 255, 255]), {}).getPixel(0, 0)).toEqual([255, 255, 255]);
+    // 5 bits: 100 >> 3 = 12 of 31 -> 99
+    expect(simulatePanel(canvasOf([100, 100, 100]), { bitDepth: 5 }).getPixel(0, 0)).toEqual([99, 99, 99]);
+  });
+
+  test("applies dimming and color balance first", () => {
+    // 200 * 0.5 = 100 -> nearest step of 16 = 96 -> level 6 of 15 -> 102; blue * 0.5 -> 50 -> 48 -> level 3 -> 51
+    expect(simulatePanel(canvasOf([200, 200, 200]), { dimPercent: 50, colorBalance: [1, 1, 0.5] }).getPixel(0, 0)).toEqual([102, 102, 51]);
+  });
+
+  test("keeps black black and doesn't touch the source canvas", () => {
+    const src = canvasOf([30, 20, 10]);
+    simulatePanel(src, { dimPercent: 45 });
+    expect(src.getPixel(0, 0)).toEqual([30, 20, 10]);
+    expect(simulatePanel(canvasOf([0, 0, 0]), { dimPercent: 45 }).getPixel(0, 0)).toEqual([0, 0, 0]);
   });
 });

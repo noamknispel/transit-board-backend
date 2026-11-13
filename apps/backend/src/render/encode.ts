@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Canvas } from "./canvas.js";
+import { Canvas } from "./canvas.js";
 
 /**
  * Display payload, version 1. All integers are little-endian.
@@ -54,32 +54,65 @@ export interface DisplaySettings {
    * Values above 1 are fine while there is dimming headroom; results clamp at 255.
    */
   colorBalance?: readonly [number, number, number];
+  /**
+   * The firmware's rgbmatrix bit_depth (default 4). It sets how many
+   * brightness levels a channel has, which is what dimmed colors are rounded to.
+   */
+  bitDepth?: number;
 }
 
-// The firmware drives the matrix at bit_depth=4: a channel only has 16
-// brightness levels, 16 apart, and anything below 16 shows as off. Each dimmed
-// channel is rounded to the nearest level rather than left for the panel to
-// truncate or lifted to the first level. That keeps the balance between
-// channels (lifting only the weak ones turns dark reds purple) and lets faint
-// shadows go fully off instead of all becoming the same dim gray.
-const LEVEL = 16;
+export const DEFAULT_BIT_DEPTH = 4;
+
+// With rgbmatrix bit_depth=4 a channel only has 16 brightness levels, 16 apart
+// on the 0-255 scale (5 bits: 32 levels, 8 apart), and anything below one level
+// shows as off. Each dimmed channel is rounded to the nearest level rather than
+// left for the panel to truncate or lifted to the first level. That keeps the
+// balance between channels (lifting only the weak ones turns dark reds purple)
+// and lets faint shadows go fully off instead of all becoming the same dim gray.
+const levelStep = (bitDepth: number) => 1 << (8 - bitDepth);
 
 type Balance = readonly [number, number, number];
 const NEUTRAL: Balance = [1, 1, 1];
 
-function adjustColor(color: number, percent: number, balance: Balance): number {
+export function adjustColor(color: number, percent: number, balance: Balance, bitDepth = DEFAULT_BIT_DEPTH): number {
   const neutral = balance[0] === 1 && balance[1] === 1 && balance[2] === 1;
   if (percent >= 100 && neutral) return color;
+  const step = levelStep(bitDepth);
   const scale = (c: number, gain: number) => {
     const v = ((c * percent) / 100) * gain;
     // Undimmed colors are left for the firmware to truncate; dimmed ones snap to a level.
-    return Math.min(255, percent >= 100 ? Math.round(v) : Math.round(v / LEVEL) * LEVEL);
+    return Math.min(255, percent >= 100 ? Math.round(v) : Math.round(v / step) * step);
   };
   return (
     (scale((color >> 16) & 255, balance[0]) << 16) |
     (scale((color >> 8) & 255, balance[1]) << 8) |
     scale(color & 255, balance[2])
   );
+}
+
+/**
+ * What the panel will actually light for `canvas`: the same dimming and color
+ * balance the encoder applies, then the firmware's truncation to
+ * `bitDepth` bits per channel, shown on the 0-255 scale. For previews.
+ */
+export function simulatePanel(canvas: Canvas, settings: Pick<DisplaySettings, "dimPercent" | "colorBalance" | "bitDepth">): Canvas {
+  const bitDepth = settings.bitDepth ?? DEFAULT_BIT_DEPTH;
+  const shift = 8 - bitDepth;
+  const top = (1 << bitDepth) - 1;
+  const lit = (v: number) => Math.round(((v >> shift) * 255) / top);
+  const out = new Canvas(canvas.width, canvas.height);
+  const cache = new Map<number, [number, number, number]>();
+  for (let p = 0; p < canvas.width * canvas.height; p++) {
+    const key = (canvas.data[p * 3]! << 16) | (canvas.data[p * 3 + 1]! << 8) | canvas.data[p * 3 + 2]!;
+    let rgb = cache.get(key);
+    if (!rgb) {
+      const c = adjustColor(key, settings.dimPercent ?? 100, settings.colorBalance ?? NEUTRAL, bitDepth);
+      rgb = [lit((c >> 16) & 255), lit((c >> 8) & 255), lit(c & 255)];
+      cache.set(key, rgb);
+    }
+    out.data.set(rgb, p * 3);
+  }
+  return out;
 }
 
 export interface EncodedDisplay {
@@ -164,7 +197,7 @@ export function encodeDisplay(frames: EncodedFrame[], settings: DisplaySettings)
     view.setUint16(off + 2, f.palette.length, true);
     off += 4;
     for (const original of f.palette) {
-      const color = adjustColor(original, settings.dimPercent ?? 100, settings.colorBalance ?? NEUTRAL);
+      const color = adjustColor(original, settings.dimPercent ?? 100, settings.colorBalance ?? NEUTRAL, settings.bitDepth);
       body[off++] = (color >> 16) & 255;
       body[off++] = (color >> 8) & 255;
       body[off++] = color & 255;

@@ -2,7 +2,7 @@ import { DeviceModel, MIN_BRIGHTNESS, type DisplaySettingsUpdate } from "../mode
 import { isDisplayOn, validateWindow, withDisplayState } from "../services/schedule.js";
 import { getWidgetsData } from "./widget.controller.js";
 import { widgetRegistry } from "../widgets/index.js";
-import { encodeDisplay, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
+import { DEFAULT_BIT_DEPTH, encodeDisplay, simulatePanel, type EncodedDisplay, type EncodedFrame } from "../render/encode.js";
 import { encodePng } from "../render/png.js";
 import { statusCanvas, type RenderContext } from "../render/layout.js";
 import type { Canvas } from "../render/canvas.js";
@@ -14,6 +14,12 @@ const DISPLAY: RenderContext = {
   height: Number(process.env.DISPLAY_HEIGHT || "32"),
 };
 const MAX_OFF_WINDOWS = 20;
+// rgbmatrix bit_depth in the firmware (code.py): 4-6, i.e. 16-64 brightness levels per channel.
+// Must match the firmware's BIT_DEPTH so dimmed colors are rounded to levels the panel has.
+const BIT_DEPTH = (() => {
+  const n = Number(process.env.DISPLAY_BIT_DEPTH || DEFAULT_BIT_DEPTH);
+  return Number.isInteger(n) && n >= 4 && n <= 6 ? n : DEFAULT_BIT_DEPTH;
+})();
 // Per-channel gain for panels that aren't color neutral, e.g. "1,0.85,0.6" tames a
 // blue-heavy white. Anything that isn't three non-negative numbers is ignored.
 const COLOR_BALANCE = (() => {
@@ -74,6 +80,7 @@ async function renderDevice(deviceId: string): Promise<RenderedDisplay> {
     brightness: device && !isDisplayOn(device) ? 0 : 100,
     dimPercent: device?.brightness ?? 100,
     colorBalance: COLOR_BALANCE,
+    bitDepth: BIT_DEPTH,
   });
   return { encoded, canvases: frames.map((f) => f.canvas) };
 }
@@ -143,7 +150,15 @@ export const getPreview = async (req: Request, deviceId: string) => {
     const url = new URL(req.url);
     const scale = Math.min(16, Math.max(1, parseInt(url.searchParams.get("scale") || "6", 10) || 6));
     const frameParam = url.searchParams.get("frame") || "0";
-    const { canvases } = await getRendered(deviceId);
+    const { canvases: rendered } = await getRendered(deviceId);
+    // By default show what the panel will actually light (dimming, color balance and
+    // the panel's limited brightness levels); ?raw=1 shows the undimmed frames.
+    const canvases =
+      url.searchParams.get("raw") === "1"
+        ? rendered
+        : rendered.map((canvas) =>
+            simulatePanel(canvas, { dimPercent: device.brightness, colorBalance: COLOR_BALANCE, bitDepth: BIT_DEPTH }),
+          );
 
     let selected: Canvas[];
     if (frameParam === "all") {

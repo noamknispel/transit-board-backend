@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import jpeg from "jpeg-js";
 import { Canvas } from "./canvas.js";
-import { applyGamma, boostSaturation, decodeArt, downscale, drawBitmap, quantize, styleArt, type Bitmap } from "./image.js";
+import { applyGamma, autoLevels, boostSaturation, decodeArt, downscale, drawBitmap, quantize, styleArt, type Bitmap } from "./image.js";
 
 /** A width x height bitmap whose pixel (x, y) is colorAt(x, y). */
 function bitmap(width: number, height: number, colorAt: (x: number, y: number) => [number, number, number]): Bitmap {
@@ -68,6 +68,34 @@ describe("boostSaturation", () => {
     const src = bitmap(1, 1, () => [10, 100, 200]);
     expect(boostSaturation(src, 1)).toBe(src);
     expect(Array.from(boostSaturation(bitmap(1, 1, () => [200, 50, 10]), 2).data)).toEqual([200, 0, 0]);
+  });
+});
+
+describe("autoLevels", () => {
+  test("brightens a dark image so its bright end reaches full brightness", () => {
+    const dark = bitmap(10, 10, (x) => [40 + x * 4, 20, 10]); // peak 76
+    const out = autoLevels(dark, 5);
+    const peak = Math.max(...Array.from(out.data.filter((_, i) => i % 3 === 0)));
+    expect(peak).toBeGreaterThan(240);
+    // ratios between pixels are kept
+    expect(out.data[3]! / out.data[0]!).toBeCloseTo(44 / 40, 1);
+  });
+
+  test("never gains more than maxGain, and leaves bright images alone", () => {
+    const dim = bitmap(10, 10, () => [20, 10, 5]);
+    expect(autoLevels(dim, 2.5).data[0]).toBe(50);
+    const bright = bitmap(10, 10, () => [250, 200, 100]);
+    expect(autoLevels(bright, 2.5)).toBe(bright);
+  });
+
+  test("a few bright specks don't stop a dark image from being brightened", () => {
+    const speckled = bitmap(20, 20, (x, y) => (x === 0 && y < 3 ? [255, 255, 255] : [50, 30, 20]));
+    expect(autoLevels(speckled, 3).data[3]).toBeGreaterThan(100); // pixel (1,0): 50 -> ~150
+  });
+
+  test("maxGain 1 turns it off", () => {
+    const dark = bitmap(4, 4, () => [40, 20, 10]);
+    expect(autoLevels(dark, 1)).toBe(dark);
   });
 });
 

@@ -42,6 +42,26 @@ export function applyGamma(src: Bitmap, gamma: number): Bitmap {
 }
 
 /**
+ * Brighten a dark cover so it uses more of the panel's few brightness levels:
+ * scale every channel so the 98th-percentile brightest pixel reaches full
+ * brightness (the top 2% are left to clip rather than set the scale, so a
+ * stray white speck doesn't stop a dark cover from being brightened). Never
+ * darkens and never gains more than `maxGain`; 0 turns it off.
+ */
+export const ART_AUTOLEVEL_MAX_GAIN = Number(process.env.SPOTIFY_ART_AUTOLEVEL || "2.5");
+
+export function autoLevels(src: Bitmap, maxGain: number): Bitmap {
+  if (maxGain <= 1) return src;
+  const peaks: number[] = [];
+  for (let i = 0; i < src.data.length; i += 3) peaks.push(Math.max(src.data[i]!, src.data[i + 1]!, src.data[i + 2]!));
+  peaks.sort((a, b) => a - b);
+  const p98 = peaks[Math.min(peaks.length - 1, Math.floor(peaks.length * 0.98))]!;
+  const gain = p98 > 0 ? Math.min(maxGain, 255 / p98) : 1;
+  if (gain <= 1.02) return src;
+  return { ...src, data: src.data.map((v) => Math.min(255, Math.round(v * gain))) };
+}
+
+/**
  * Push each pixel's channels away from its brightest one, keeping brightness
  * the same. The panel has only 16 levels per channel (and fewer once dimmed),
  * so faint hues round to gray or off; a little extra saturation keeps them.
@@ -172,9 +192,10 @@ export function styleArt(
   gamma = ART_GAMMA,
   blocks = ART_BLOCKS,
   saturation = ART_SATURATION,
+  autoLevel = ART_AUTOLEVEL_MAX_GAIN,
 ): Bitmap {
   const base = style === "pixel" ? enlarge(downscale(art, blocks), art.width) : art;
-  return quantize(boostSaturation(applyGamma(base, gamma), saturation), ART_COLORS);
+  return quantize(boostSaturation(applyGamma(autoLevels(base, autoLevel), gamma), saturation), ART_COLORS);
 }
 
 /** Copy `bitmap` onto `canvas` with its top-left corner at (x, y). */
