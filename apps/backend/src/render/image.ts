@@ -16,16 +16,27 @@ const ART_COLORS = 48;
 
 /**
  * LED panels show values almost linearly, while images are encoded for
- * monitors, so mid-tones look washed out on the board. Raising each channel to
- * `gamma` (2.2 matches a monitor) darkens them back to roughly what the picture looks like
- * on screen. 1 leaves the image as it is.
+ * monitors, so mid-tones look washed out on the board. Raising brightness to
+ * `gamma` darkens them back toward what the picture looks like on screen; 1
+ * leaves the image as it is. Only the brightness is curved: each pixel keeps
+ * its channel ratios, because gamma on every channel separately also
+ * boosts saturation and the colors come out garish.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.2");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.0");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
-  const table = Array.from({ length: 256 }, (_, v) => Math.round(255 * (v / 255) ** gamma));
-  return { ...src, data: src.data.map((v) => table[v]!) };
+  const out = new Uint8Array(src.data.length);
+  for (let i = 0; i < src.data.length; i += 3) {
+    const r = src.data[i]!, g = src.data[i + 1]!, b = src.data[i + 2]!;
+    const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    // luma <= 1 so the scale is <= 1: channels only shrink, never clip
+    const scale = luma > 0 ? luma ** (gamma - 1) : 0;
+    out[i] = Math.round(r * scale);
+    out[i + 1] = Math.round(g * scale);
+    out[i + 2] = Math.round(b * scale);
+  }
+  return { ...src, data: out };
 }
 
 /** Box-average `src` down to size x size (the source is expected to be larger). */

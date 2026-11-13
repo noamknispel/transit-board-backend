@@ -36,6 +36,14 @@ describe("applyGamma", () => {
     expect(Array.from(out.data.slice(6, 9))).toEqual([255, 255, 255]);
   });
 
+  test("keeps each pixel's hue instead of boosting saturation", () => {
+    const [r, g, b] = Array.from(applyGamma(bitmap(1, 1, () => [200, 120, 80]), 2.2).data) as [number, number, number];
+    expect(r).toBeLessThan(200);
+    // channel ratios survive (within rounding)
+    expect(g / r).toBeCloseTo(120 / 200, 1);
+    expect(b / r).toBeCloseTo(80 / 200, 1);
+  });
+
   test("gamma 1 changes nothing", () => {
     const src = bitmap(2, 1, () => [10, 100, 200]);
     expect(applyGamma(src, 1)).toBe(src);
