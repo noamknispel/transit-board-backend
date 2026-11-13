@@ -24,7 +24,7 @@ const ART_COLORS = 48;
  * brightest channel, not perceived luminance: luminance weighs red at ~20% and
  * blue at ~7%, so saturated reds and blues would be crushed to near-black.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.0");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "1.5");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
