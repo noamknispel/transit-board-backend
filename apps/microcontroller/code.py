@@ -16,6 +16,7 @@ print("=" * 40)
 import gc
 import time
 import board
+import microcontroller
 import displayio
 import framebufferio
 import rgbmatrix
@@ -56,6 +57,9 @@ POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "10"))
 RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY", "2"))
 # Consecutive failed polls before we stop showing stale data.
 MAX_FAILURES = 3
+# Consecutive failed WiFi reconnects (each already resets the ESP32) before
+# rebooting the whole board.
+MAX_RECONNECT_FAILURES = 5
 
 # Display dimensions (must match the backend's DISPLAY_WIDTH/HEIGHT)
 WIDTH = 128
@@ -199,8 +203,12 @@ def hard_reset_esp32():
         return False
 
 
+reconnect_failures = 0
+
+
 def reconnect_wifi():
     """Reconnect WiFi and refresh HTTP session after transport failures."""
+    global reconnect_failures
     print("Reconnecting WiFi...")
     set_status("Reconnect")
     for attempt in range(2):
@@ -209,19 +217,26 @@ def reconnect_wifi():
             init_http_session()
             print("Reconnected. IP:", esp.ip_address)
             set_status("Connected")
+            reconnect_failures = 0
             time.sleep(0.5)
             return True
         except Exception as reconnect_error:
             print("Reconnect error:", reconnect_error)
-            err_text = str(reconnect_error)
 
-            # ESP32 SPI transport can lock up; reset once and retry.
-            if attempt == 0 and "Timed out waiting for SPI char" in err_text:
-                if hard_reset_esp32():
-                    continue
+            # The ESP32 locks up in more than one way ("Timed out waiting for
+            # SPI char", "ESP32 not responding", ...); reset it once and retry.
+            if attempt == 0 and hard_reset_esp32():
+                continue
+            break
 
-            return False
-
+    reconnect_failures += 1
+    print("Reconnect failed ({}/{})".format(reconnect_failures, MAX_RECONNECT_FAILURES))
+    if reconnect_failures >= MAX_RECONNECT_FAILURES:
+        # Resetting the ESP32 alone hasn't helped; reboot the whole board.
+        print("Rebooting board...")
+        set_status("Rebooting")
+        time.sleep(1)
+        microcontroller.reset()
     return False
 
 print("Connecting to WiFi:", SSID)

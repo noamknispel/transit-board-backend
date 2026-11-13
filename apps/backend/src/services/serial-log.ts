@@ -25,6 +25,7 @@ type Listener = (event: { type: "line"; line: LogLine } | { type: "status"; stat
 const MAX_LINES = parseInt(process.env.SERIAL_LOG_LINES || "500");
 const RETRY_MS = 3000;
 const WATCH_MS = 5000;
+const STALL_MS = 60000;
 
 const lines: LogLine[] = [];
 const listeners = new Set<Listener>();
@@ -86,22 +87,31 @@ const readPort = async (port: string) => {
   setStatus({ connected: true, port });
   push("system", `Connected to ${port}`);
 
-  // When the board resets it can come back as a different ttyACM node while
-  // cat keeps blocking on the old one, so the stream silently stops. Restart
-  // the reader whenever the port we opened no longer points at the board.
+  // Restart the reader when it stops seeing the board:
+  // - the board reset and came back as a different ttyACM node while cat
+  //   keeps blocking on the old one;
+  // - nothing has arrived for STALL_MS. The board prints on every poll, and
+  //   the subprocess stream has been seen to stop delivering while cat was
+  //   still reading the port.
+  // A stalled stream may never finish, so stopping doesn't wait for it.
   const opened = resolvePort(port);
+  let lastData = Date.now();
+  let stop: (reason: string) => void = () => {};
+  const stopped = new Promise<string>((resolve) => (stop = resolve));
   const watch = setInterval(() => {
     const current = findPort();
     if (!current || resolvePort(current) !== opened) {
-      push("system", `Board moved from ${opened} to ${current ? resolvePort(current) : "nowhere"}; reconnecting`);
-      proc.kill();
+      stop(`Board moved from ${opened} to ${current ? resolvePort(current) : "nowhere"}; reconnecting`);
+    } else if (Date.now() - lastData > STALL_MS) {
+      stop(`No output from ${port} for ${STALL_MS / 1000}s; reopening`);
     }
   }, WATCH_MS);
 
   const decoder = new TextDecoder();
   let pending = "";
-  try {
+  const read = (async () => {
     for await (const chunk of proc.stdout) {
+      lastData = Date.now();
       pending += decoder.decode(chunk, { stream: true });
       const parts = pending.split("\n");
       pending = parts.pop() ?? "";
@@ -110,8 +120,23 @@ const readPort = async (port: string) => {
         if (text.trim()) push("device", text);
       }
     }
+  })();
+  // Once abandoned, a later failure of the old stream is irrelevant.
+  read.catch(() => {});
+
+  let reason: string | void;
+  try {
+    reason = await Promise.race([read, stopped]);
   } finally {
     clearInterval(watch);
+    // No-op if cat already exited; otherwise don't leave it holding the port.
+    proc.kill();
+  }
+
+  if (reason) {
+    setStatus({ connected: false });
+    push("system", reason);
+    return;
   }
 
   const exitCode = await proc.exited;

@@ -53,11 +53,12 @@ export function DeviceLogs() {
   return (
     <div className="tb-panel mt-6 p-5 md:p-6">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <h2 className="font-display text-xl text-white">Board Console</h2>
-          <p className="flex items-center gap-2 text-sm text-ops-200">
-            <span className={`inline-block h-2 w-2 rounded-full ${statusColor}`} />
-            {statusLabel}
+          {/* The by-id port path is one long unbreakable word; keep it to one line. */}
+          <p className="flex items-center gap-2 text-sm text-ops-200" title={statusLabel}>
+            <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${statusColor}`} />
+            <span className="truncate">{statusLabel}</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -85,7 +86,7 @@ export function DeviceLogs() {
               <span className="shrink-0 text-ops-500">
                 {new Date(line.ts).toLocaleTimeString()}
               </span>
-              <span className={line.source === 'system' ? 'text-accent-cyan' : 'text-ops-100'}>
+              <span className={`min-w-0 ${line.source === 'system' ? 'text-accent-cyan' : 'text-ops-100'}`}>
                 {line.text}
               </span>
             </div>
