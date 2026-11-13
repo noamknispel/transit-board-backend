@@ -24,7 +24,7 @@ const ART_COLORS = 48;
  * brightest channel, not perceived luminance: luminance weighs red at ~20% and
  * blue at ~7%, so saturated reds and blues would be crushed to near-black.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "1.0");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "0.9");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
@@ -67,7 +67,7 @@ export function autoLevels(src: Bitmap, maxGain: number): Bitmap {
  * so faint hues round to gray or off; a little extra saturation keeps them.
  * 1 leaves the image as it is.
  */
-export const ART_SATURATION = Number(process.env.SPOTIFY_ART_SATURATION || "1.3");
+export const ART_SATURATION = Number(process.env.SPOTIFY_ART_SATURATION || "1.15");
 
 export function boostSaturation(src: Bitmap, factor: number): Bitmap {
   if (factor === 1) return src;
