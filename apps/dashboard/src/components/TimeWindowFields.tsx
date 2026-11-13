@@ -34,8 +34,8 @@ export function TimeWindowFields({ days, start, end, onChange, onTimeBlur, disab
           </button>
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
+        <div className="min-w-0">
           <label htmlFor={`${idPrefix}-start`} className="tb-label">From</label>
           <input
             id={`${idPrefix}-start`}
@@ -47,7 +47,7 @@ export function TimeWindowFields({ days, start, end, onChange, onTimeBlur, disab
             className="tb-input"
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label htmlFor={`${idPrefix}-end`} className="tb-label">Until</label>
           <input
             id={`${idPrefix}-end`}
