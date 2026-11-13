@@ -107,6 +107,8 @@ export interface SpotifyWidget extends BaseWidget {
     /** Title color; the artist is always gray */
     color?: string;
     showProgress?: boolean;
+    /** Edge of the board the progress bar sits on; defaults to top */
+    progressPosition?: 'top' | 'bottom';
   };
 }
 

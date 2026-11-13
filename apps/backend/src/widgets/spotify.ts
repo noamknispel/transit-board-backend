@@ -44,6 +44,7 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
   defaultConfig = {
     color: "#FFFFFF",
     showProgress: true,
+    progressPosition: "top",
   };
 
   private service = new SpotifyService();
@@ -61,6 +62,10 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       throw new Error("showProgress must be a boolean");
     }
 
+    if (config.progressPosition !== undefined && !["top", "bottom"].includes(config.progressPosition)) {
+      throw new Error("progressPosition must be 'top' or 'bottom'");
+    }
+
     return true;
   }
 
@@ -69,9 +74,10 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
 
     const color = config.color || this.defaultConfig.color;
     const showProgress = config.showProgress ?? this.defaultConfig.showProgress;
+    const progressPosition = config.progressPosition === "bottom" ? "bottom" : "top";
 
     const { nowPlaying, fetchedAt } = await this.service.getNowPlaying();
-    if (!nowPlaying) return { playing: false, color, showProgress };
+    if (!nowPlaying) return { playing: false, color, showProgress, progressPosition };
 
     return {
       playing: true,
@@ -83,6 +89,7 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       durationMs: nowPlaying.durationMs,
       color,
       showProgress,
+      progressPosition,
     };
   }
 
@@ -103,12 +110,12 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     canvas.text(truncate(toDisplayText(String(data.title ?? "")), maxChars), textX, rowCenter(0), parseColor(data.color, WHITE));
     canvas.text(truncate(toDisplayText(String(data.artist ?? "")), maxChars), textX, rowCenter(1), ARTIST_COLOR);
 
-    // Thin progress bar along the bottom edge, beside the art
+    // Thin progress bar along the top or bottom edge, beside the art
     const duration = Number(data.durationMs) || 0;
     if (data.showProgress !== false && duration > 0) {
       const barWidth = ctx.width - RIGHT_MARGIN - textX;
       const filled = Math.round((barWidth * Math.min(duration, Math.max(0, Number(data.progressMs) || 0))) / duration);
-      const y = ctx.height - 1;
+      const y = data.progressPosition === "bottom" ? ctx.height - 1 : 0;
       canvas.fillRect(textX, y, barWidth, 1, PROGRESS_TRACK);
       canvas.fillRect(textX, y, filled, 1, PROGRESS_FILL);
     }

@@ -78,14 +78,21 @@ describe("spotify widget", () => {
     expect(lit(canvas!, 0, ctx.width, 0, 16)).toBeGreaterThan(0); // title
     expect(lit(canvas!, 0, ctx.width, 16, 31)).toBeGreaterThan(0); // artist
     // A quarter of the way through: the green fill covers 1/4 of the track
-    const barY = ctx.height - 1;
+    const barY = 0; // top by default
     const filled = Array.from({ length: ctx.width }, (_, x) => canvas!.getPixel(x, barY)).filter(([r, g]) => g > r).length;
     expect(filled).toBe(Math.round((ctx.width - 2 - 2) / 4));
   });
 
+  test("draws the progress bar on the bottom edge when asked", () => {
+    const [canvas] = spotify.render({ ...playing, progressPosition: "bottom" }, ctx);
+    expect(lit(canvas!, 36, ctx.width, ctx.height - 1)).toBeGreaterThan(0);
+    expect(lit(canvas!, 36, ctx.width, 0, 1)).toBe(0);
+  });
+
   test("leaves the progress bar off when disabled", () => {
     const [canvas] = spotify.render({ ...playing, showProgress: false }, ctx);
-    expect(lit(canvas!, 0, ctx.width, ctx.height - 1)).toBe(0);
+    expect(lit(canvas!, 36, ctx.width, ctx.height - 1)).toBe(0);
+    expect(lit(canvas!, 36, ctx.width, 0, 1)).toBe(0);
   });
 
   test("keeps long text inside the board", () => {
@@ -95,6 +102,7 @@ describe("spotify widget", () => {
 
   test("validates config", () => {
     expect(() => spotify.validateConfig({ showProgress: "yes" })).toThrow();
+    expect(() => spotify.validateConfig({ progressPosition: "middle" })).toThrow();
     expect(spotify.validateConfig({})).toBe(true);
   });
 });

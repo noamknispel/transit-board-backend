@@ -78,6 +78,7 @@ export function AddWidgetModal({
 
   const [spotifyColor, setSpotifyColor] = useState('#FFFFFF');
   const [spotifyShowProgress, setSpotifyShowProgress] = useState(true);
+  const [spotifyProgressPosition, setSpotifyProgressPosition] = useState<'top' | 'bottom'>('top');
   // null until loaded (or if the status request failed)
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
 
@@ -169,6 +170,7 @@ export function AddWidgetModal({
         case 'spotify':
           setSpotifyColor(typeof config.color === 'string' ? config.color : '#FFFFFF');
           setSpotifyShowProgress(typeof config.showProgress === 'boolean' ? config.showProgress : true);
+          setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
           break;
         case 'countdown':
           setCountdownMessage(typeof config.message === 'string' ? config.message : '');
@@ -191,6 +193,7 @@ export function AddWidgetModal({
       setCountdownTarget('');
       setSpotifyColor('#FFFFFF');
       setSpotifyShowProgress(true);
+      setSpotifyProgressPosition('top');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -336,7 +339,7 @@ export function AddWidgetModal({
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
       case 'spotify':
-        return { color: spotifyColor, showProgress: spotifyShowProgress };
+        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition };
       case 'countdown':
         return {
           message: countdownMessage.trim(),
@@ -558,6 +561,19 @@ export function AddWidgetModal({
                     />
                     Show progress bar
                   </label>
+                  {spotifyShowProgress && (
+                    <>
+                      <label className="tb-label">Progress Bar Position</label>
+                      <select
+                        value={spotifyProgressPosition}
+                        onChange={(e) => setSpotifyProgressPosition(e.target.value === 'bottom' ? 'bottom' : 'top')}
+                        className="tb-input mb-4"
+                      >
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                    </>
+                  )}
                   <p className="text-xs text-ops-300">
                     Leaves the rotation while nothing is playing. Long titles are cut short.
                   </p>
@@ -894,7 +910,7 @@ export function AddWidgetModal({
               {widgetType === 'spotify' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Title color:</strong> {spotifyColor}</p>
-                  <p><strong>Progress bar:</strong> {spotifyShowProgress ? 'On' : 'Off'}</p>
+                  <p><strong>Progress bar:</strong> {spotifyShowProgress ? `On (${spotifyProgressPosition})` : 'Off'}</p>
                 </div>
               )}
               {widgetType === 'countdown' && (

@@ -17,10 +17,10 @@ const ART_COLORS = 48;
 /**
  * LED panels show values almost linearly, while images are encoded for
  * monitors, so mid-tones look washed out on the board. Raising each channel to
- * `gamma` (about 2.2) darkens them back to roughly what the picture looks like
+ * `gamma` (2.2 matches a monitor; the panel looks best a bit darker) darkens them back to roughly what the picture looks like
  * on screen. 1 leaves the image as it is.
  */
-export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.2");
+export const ART_GAMMA = Number(process.env.SPOTIFY_ART_GAMMA || "2.8");
 
 export function applyGamma(src: Bitmap, gamma: number): Bitmap {
   if (gamma === 1) return src;
