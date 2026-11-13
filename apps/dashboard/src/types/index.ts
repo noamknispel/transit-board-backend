@@ -111,6 +111,8 @@ export interface SpotifyWidget extends BaseWidget {
     progressPosition?: 'top' | 'bottom';
     /** How album art is drawn: chunky blocks (default) or every pixel */
     artStyle?: 'pixel' | 'detail';
+    /** Blocks across the art in the pixel style: 4, 8 or 16; unset uses the backend default */
+    artBlocks?: 4 | 8 | 16;
   };
 }
 

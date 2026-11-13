@@ -101,6 +101,17 @@ describe("spotify widget", () => {
     expect(canvas!.getPixel(ctx.width - 1, 0)[1]).toBeGreaterThan(0); // and reaches the last column
   });
 
+  test("art block size is a per-widget choice", () => {
+    const busy = { width: 32, height: 32, data: new Uint8Array(32 * 32 * 3).map((_, i) => (i * 37) % 256) };
+    (SpotifyService as any).art.set("busy-url", busy);
+    const eight = spotify.render({ ...playing, artUrl: "busy-url", showProgress: false, artStyle: "pixel", artBlocks: 8 }, ctx)[0]!;
+    const sixteen = spotify.render({ ...playing, artUrl: "busy-url", showProgress: false, artStyle: "pixel", artBlocks: 16 }, ctx)[0]!;
+    const same = (c: Canvas, a: [number, number], b: [number, number]) => c.getPixel(...a).join() === c.getPixel(...b).join();
+    expect(same(eight, [0, 0], [3, 3])).toBe(true); // one 4x4 block
+    expect(same(sixteen, [0, 0], [3, 3])).toBe(false); // 2x2 blocks differ within 4x4
+    expect(same(sixteen, [0, 0], [1, 1])).toBe(true); // but a 2x2 block is uniform
+  });
+
   test("leaves the progress bar off when disabled", () => {
     const [canvas] = spotify.render({ ...playing, showProgress: false }, ctx);
     expect(lit(canvas!, 36, ctx.width, ctx.height - 1)).toBe(0);
@@ -117,6 +128,8 @@ describe("spotify widget", () => {
     expect(() => spotify.validateConfig({ showProgress: "yes" })).toThrow();
     expect(() => spotify.validateConfig({ progressPosition: "middle" })).toThrow();
     expect(() => spotify.validateConfig({ artStyle: "blurry" })).toThrow();
+    expect(() => spotify.validateConfig({ artBlocks: 7 })).toThrow();
+    expect(spotify.validateConfig({ artStyle: "pixel", artBlocks: 16 })).toBe(true);
     expect(spotify.validateConfig({})).toBe(true);
   });
 });

@@ -79,7 +79,8 @@ export function AddWidgetModal({
   const [spotifyColor, setSpotifyColor] = useState('#FFFFFF');
   const [spotifyShowProgress, setSpotifyShowProgress] = useState(true);
   const [spotifyProgressPosition, setSpotifyProgressPosition] = useState<'top' | 'bottom'>('top');
-  const [spotifyArtStyle, setSpotifyArtStyle] = useState<'pixel' | 'detail'>('pixel');
+  // 'detail', or 'pixel-<blocks across>'
+  const [spotifyArt, setSpotifyArt] = useState('pixel-8');
   // null until loaded (or if the status request failed)
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
 
@@ -172,7 +173,7 @@ export function AddWidgetModal({
           setSpotifyColor(typeof config.color === 'string' ? config.color : '#FFFFFF');
           setSpotifyShowProgress(typeof config.showProgress === 'boolean' ? config.showProgress : true);
           setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
-          setSpotifyArtStyle(config.artStyle === 'detail' ? 'detail' : 'pixel');
+          setSpotifyArt(config.artStyle === 'detail' ? 'detail' : `pixel-${[4, 16].includes(config.artBlocks) ? config.artBlocks : 8}`);
           break;
         case 'countdown':
           setCountdownMessage(typeof config.message === 'string' ? config.message : '');
@@ -196,7 +197,7 @@ export function AddWidgetModal({
       setSpotifyColor('#FFFFFF');
       setSpotifyShowProgress(true);
       setSpotifyProgressPosition('top');
-      setSpotifyArtStyle('pixel');
+      setSpotifyArt('pixel-8');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -323,6 +324,11 @@ export function AddWidgetModal({
     }
   };
 
+  const spotifyArtConfig = (): { artStyle: 'pixel' | 'detail'; artBlocks?: 4 | 8 | 16 } => {
+    if (spotifyArt === 'detail') return { artStyle: 'detail' };
+    return { artStyle: 'pixel', artBlocks: Number(spotifyArt.slice(6)) as 4 | 8 | 16 };
+  };
+
   const buildConfig = (): WidgetConfig => {
     switch (widgetType) {
       case 'message':
@@ -342,7 +348,7 @@ export function AddWidgetModal({
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
       case 'spotify':
-        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, artStyle: spotifyArtStyle };
+        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, ...spotifyArtConfig() };
       case 'countdown':
         return {
           message: countdownMessage.trim(),
@@ -541,12 +547,14 @@ export function AddWidgetModal({
                   )}
                   <label className="tb-label">Album Art Style</label>
                   <select
-                    value={spotifyArtStyle}
-                    onChange={(e) => setSpotifyArtStyle(e.target.value === 'detail' ? 'detail' : 'pixel')}
+                    value={spotifyArt}
+                    onChange={(e) => setSpotifyArt(e.target.value)}
                     className="tb-input mb-4"
                   >
-                    <option value="pixel">Pixel (chunky blocks)</option>
-                    <option value="detail">Detail (sharper)</option>
+                    <option value="pixel-8">Pixel 8×8 (chunky)</option>
+                    <option value="pixel-16">Pixel 16×16 (finer)</option>
+                    <option value="pixel-4">Pixel 4×4 (chunkiest)</option>
+                    <option value="detail">Detail (every pixel)</option>
                   </select>
                   <label className="tb-label">Title Color</label>
                   <div className="mb-4 flex gap-2">
@@ -922,7 +930,7 @@ export function AddWidgetModal({
               {widgetType === 'spotify' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Title color:</strong> {spotifyColor}</p>
-                  <p><strong>Album art:</strong> {spotifyArtStyle === 'pixel' ? 'Pixel' : 'Detail'}</p>
+                  <p><strong>Album art:</strong> {spotifyArt === 'detail' ? 'Detail' : `Pixel ${spotifyArt.slice(6)}×${spotifyArt.slice(6)}`}</p>
                   <p><strong>Progress bar:</strong> {spotifyShowProgress ? `On (${spotifyProgressPosition})` : 'Off'}</p>
                 </div>
               )}

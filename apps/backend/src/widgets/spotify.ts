@@ -9,6 +9,8 @@ const ARTIST_COLOR = hexToRgb(0xa0a0a0);
 const PROGRESS_TRACK = hexToRgb(0x303030);
 const PROGRESS_FILL = hexToRgb(0x1db954);
 const TEXT_GAP = 4;
+/** Blocks across the 32px art in the pixel style: 8 is chunky (4x4 pixels each), 16 finer, 4 chunkiest. */
+export const ART_BLOCK_CHOICES = [4, 8, 16];
 const RIGHT_MARGIN = 2;
 
 /**
@@ -71,6 +73,10 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       throw new Error("artStyle must be 'pixel' or 'detail'");
     }
 
+    if (config.artBlocks !== undefined && !ART_BLOCK_CHOICES.includes(config.artBlocks)) {
+      throw new Error(`artBlocks must be one of ${ART_BLOCK_CHOICES.join(", ")}`);
+    }
+
     return true;
   }
 
@@ -81,9 +87,11 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     const showProgress = config.showProgress ?? this.defaultConfig.showProgress;
     const progressPosition = config.progressPosition === "bottom" ? "bottom" : "top";
     const artStyle: ArtStyle = config.artStyle === "detail" ? "detail" : "pixel";
+    // Widgets without a choice use the backend default (SPOTIFY_ART_BLOCKS)
+    const artBlocks: number | undefined = ART_BLOCK_CHOICES.includes(config.artBlocks) ? config.artBlocks : undefined;
 
     const { nowPlaying, fetchedAt } = await this.service.getNowPlaying();
-    if (!nowPlaying) return { playing: false, color, showProgress, progressPosition, artStyle };
+    if (!nowPlaying) return { playing: false, color, showProgress, progressPosition, artStyle, artBlocks };
 
     return {
       playing: true,
@@ -97,6 +105,7 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
       showProgress,
       progressPosition,
       artStyle,
+      artBlocks,
     };
   }
 
@@ -108,7 +117,9 @@ export class SpotifyWidgetPlugin implements WidgetPlugin {
     const canvas = new Canvas(ctx.width, ctx.height);
 
     const decoded = SpotifyService.getArt(data.artUrl);
-    const art = decoded && styleArt(decoded, data.artStyle === "detail" ? "detail" : "pixel");
+    const art =
+      decoded &&
+      styleArt(decoded, data.artStyle === "detail" ? "detail" : "pixel", undefined, ART_BLOCK_CHOICES.includes(data.artBlocks) ? data.artBlocks : undefined);
     if (art) drawBitmap(canvas, art, 0, Math.floor((ctx.height - ART_SIZE) / 2));
 
     const textX = art ? ART_SIZE + TEXT_GAP : 2;
