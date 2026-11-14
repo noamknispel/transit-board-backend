@@ -22,6 +22,12 @@ interface WidgetCardProps {
   dragHandleProps?: any;
 }
 
+const AGENTS_SHOW_LABEL = {
+  attention: 'when one needs you',
+  active: 'while any are working',
+  always: 'always',
+} as const;
+
 export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate, isDragging, dragHandleProps }: WidgetCardProps) {
   // Re-render every 30s so countdown status stays current.
   const [now, setNow] = useState(Date.now());
@@ -47,6 +53,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return 'SPT';
       case 'pixelart':
         return 'ART';
+      case 'agents':
+        return 'AGT';
       default:
         return 'WGT';
     }
@@ -64,6 +72,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return `${widget.config.message} · ${countdownStatus(widget.config, now)}`;
       case 'spotify':
         return 'Now playing on Spotify · hidden while paused';
+      case 'agents':
+        return `Claude agents · shown ${AGENTS_SHOW_LABEL[widget.config.showWhen ?? 'attention']}`;
       case 'pixelart':
         return `Pixel art · ${widget.config.width}×${widget.config.height}`;
       default:

@@ -40,7 +40,7 @@ export interface DisplaySettingsUpdate {
 }
 
 // Widget types
-export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify' | 'pixelart';
+export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify' | 'pixelart' | 'agents';
 
 
 export interface BaseWidget {
@@ -130,6 +130,14 @@ export interface PixelArtWidget extends BaseWidget {
   };
 }
 
+export interface AgentsWidget extends BaseWidget {
+  type: 'agents';
+  config: {
+    /** attention (default): needs you or finished; active: anything not idle; always */
+    showWhen?: 'attention' | 'active' | 'always';
+  };
+}
+
 /** Whether the backend's one Spotify account is set up (never includes tokens) */
 export interface SpotifyStatus {
   /** SPOTIFY_CLIENT_ID is set on the backend */
@@ -138,7 +146,7 @@ export interface SpotifyStatus {
   displayName: string | null;
 }
 
-export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget | PixelArtWidget;
+export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget | PixelArtWidget | AgentsWidget;
 
 // Widget config types for creation/update
 export type WidgetConfig = 
@@ -147,7 +155,8 @@ export type WidgetConfig =
   | ClockWidget['config']
   | CountdownWidget['config']
   | SpotifyWidget['config']
-  | PixelArtWidget['config'];
+  | PixelArtWidget['config']
+  | AgentsWidget['config'];
 
 export interface CreateWidgetRequest {
   type: WidgetType;

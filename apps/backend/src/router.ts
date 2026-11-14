@@ -3,6 +3,7 @@ import * as widgetController from "./controllers/widget.controller";
 import * as displayController from "./controllers/display.controller";
 import * as logsController from "./controllers/logs.controller";
 import * as spotifyController from "./controllers/spotify.controller";
+import * as agentsController from "./controllers/agents.controller";
 
 export const router = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -80,6 +81,16 @@ export const router = async (req: Request): Promise<Response> => {
   // GET /spotify/status - Whether a Spotify account is connected
   if (pathname === "/spotify/status" && method === "GET") {
     return spotifyController.getStatus();
+  }
+
+  // POST /agents/events - Claude Code hooks report session state here
+  if (pathname === "/agents/events" && method === "POST") {
+    return agentsController.postEvent(req);
+  }
+
+  // GET /agents - Current Claude Code sessions
+  if (pathname === "/agents" && method === "GET") {
+    return agentsController.listAgents(req);
   }
 
   // GET /logs - Recent microcontroller serial output

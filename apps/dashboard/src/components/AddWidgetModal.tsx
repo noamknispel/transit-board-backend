@@ -9,6 +9,14 @@ import { MAX_ART_HEIGHT, MAX_ART_WIDTH, decodePixels, encodePixels, resizePixels
 
 const blankArt = (): ArtState => ({ width: 128, height: 32, palette: ['#000000', '#ffffff'], pixels: new Uint8Array(128 * 32) });
 
+/** Claude Code hooks that pipe each event's JSON (session id, folder, event name) to this backend. */
+const agentHooksSnippet = (): string => {
+  const command = `curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- ${window.location.origin}/agents/events || true`;
+  const hook = [{ hooks: [{ type: 'command', command }] }];
+  const events = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
+  return JSON.stringify({ hooks: Object.fromEntries(events.map((e) => [e, hook])) }, null, 2);
+};
+
 const FALLBACK_TIMEZONES = [
   'America/New_York',
   'America/Chicago',
@@ -89,6 +97,9 @@ export function AddWidgetModal({
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
 
   const [art, setArt] = useState<ArtState>(blankArt);
+
+  const [agentsShowWhen, setAgentsShowWhen] = useState<'attention' | 'active' | 'always'>('attention');
+  const [hooksCopied, setHooksCopied] = useState(false);
 
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
@@ -181,6 +192,9 @@ export function AddWidgetModal({
           setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
           setSpotifyArt(config.artStyle === 'detail' ? 'detail' : `pixel-${[4, 16].includes(config.artBlocks) ? config.artBlocks : 8}`);
           break;
+        case 'agents':
+          setAgentsShowWhen(config.showWhen === 'active' || config.showWhen === 'always' ? config.showWhen : 'attention');
+          break;
         case 'pixelart': {
           const width = Number.isInteger(config.width) ? config.width : 128;
           const height = Number.isInteger(config.height) ? config.height : 32;
@@ -212,6 +226,7 @@ export function AddWidgetModal({
       setSpotifyProgressPosition('top');
       setSpotifyArt('pixel-8');
       setArt(blankArt());
+      setAgentsShowWhen('attention');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -363,6 +378,8 @@ export function AddWidgetModal({
         return { showOriginInitials };
       case 'spotify':
         return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, ...spotifyArtConfig() };
+      case 'agents':
+        return { showWhen: agentsShowWhen };
       case 'pixelart':
         return {
           width: art.width,
@@ -448,6 +465,7 @@ export function AddWidgetModal({
     { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
     { id: 'countdown', title: 'Countdown', description: 'A message and the time left until a date.', label: 'CDN' },
     { id: 'spotify', title: 'Now Playing', description: 'Album art and track from Spotify, only while playing.', label: 'SPT' },
+    { id: 'agents', title: 'Claude Agents', description: 'A blob per Claude Code session; see which need you.', label: 'AGT' },
     { id: 'pixelart', title: 'Pixel Art', description: 'Draw a picture or import an image to show on the board.', label: 'ART' },
   ];
 
@@ -545,6 +563,41 @@ export function AddWidgetModal({
                     />
                     Enable scrolling
                   </label>
+                </>
+              )}
+
+              {widgetType === 'agents' && (
+                <>
+                  <label className="tb-label">Show on the board</label>
+                  <select
+                    value={agentsShowWhen}
+                    onChange={(e) => setAgentsShowWhen(e.target.value as typeof agentsShowWhen)}
+                    className="tb-select mb-4"
+                  >
+                    <option value="attention">When a session needs you or has finished</option>
+                    <option value="active">While any session is working</option>
+                    <option value="always">Always</option>
+                  </select>
+                  <p className="mb-2 text-sm text-ops-200">
+                    Sessions report in through Claude Code hooks. Add this to <code>~/.claude/settings.json</code> on each
+                    machine, then restart its sessions:
+                  </p>
+                  <pre className="max-h-56 overflow-auto rounded-lg border border-ops-700 bg-ops-950/65 p-3 text-xs text-ops-100">{agentHooksSnippet()}</pre>
+                  <button
+                    type="button"
+                    className="tb-btn-secondary mt-2"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(agentHooksSnippet()).then(() => {
+                        setHooksCopied(true);
+                        setTimeout(() => setHooksCopied(false), 2000);
+                      });
+                    }}
+                  >
+                    {hooksCopied ? 'Copied' : 'Copy'}
+                  </button>
+                  <p className="mt-2 text-xs text-ops-300">
+                    If the backend has AGENTS_TOKEN set, add <code>?token=…</code> to the URL.
+                  </p>
                 </>
               )}
 
@@ -976,6 +1029,11 @@ export function AddWidgetModal({
                 <p><strong>Show only:</strong> {showOnly ? 'On' : 'Off'}</p>
                 <p><strong>Schedule:</strong> {scheduleEnabled ? describeSchedule(buildSchedule()!) : 'Always on'}</p>
               </div>
+              {widgetType === 'agents' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Shown:</strong> {{ attention: 'When a session needs you or has finished', active: 'While any session is working', always: 'Always' }[agentsShowWhen]}</p>
+                </div>
+              )}
               {widgetType === 'pixelart' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Size:</strong> {art.width}×{art.height}</p>
