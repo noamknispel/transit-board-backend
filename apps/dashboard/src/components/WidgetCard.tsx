@@ -45,6 +45,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return 'CDN';
       case 'spotify':
         return 'SPT';
+      case 'pixelart':
+        return 'ART';
       default:
         return 'WGT';
     }
@@ -62,6 +64,8 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
         return `${widget.config.message} · ${countdownStatus(widget.config, now)}`;
       case 'spotify':
         return 'Now playing on Spotify · hidden while paused';
+      case 'pixelart':
+        return `Pixel art · ${widget.config.width}×${widget.config.height}`;
       default:
         return 'Unknown widget';
     }

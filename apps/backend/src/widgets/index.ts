@@ -4,6 +4,7 @@ import { MessageWidgetPlugin } from "./message.js";
 import { ClockWidgetPlugin } from "./clock.js";
 import { CountdownWidgetPlugin } from "./countdown.js";
 import { SpotifyWidgetPlugin } from "./spotify.js";
+import { PixelArtWidgetPlugin } from "./pixelart.js";
 
 /**
  * Widget plugin registry
@@ -19,6 +20,7 @@ class WidgetRegistry {
     this.register(new ClockWidgetPlugin());
     this.register(new CountdownWidgetPlugin());
     this.register(new SpotifyWidgetPlugin());
+    this.register(new PixelArtWidgetPlugin());
   }
 
   register(plugin: WidgetPlugin): void {

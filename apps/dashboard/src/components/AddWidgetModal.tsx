@@ -3,7 +3,11 @@ import { api } from '../api/client';
 import type { CreateWidgetRequest, SpotifyStatus, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, TimeWindow, WidgetType } from '../types';
 import { browserTimezone, describeSchedule, toLocalInput } from '../schedule';
 import { TimeWindowFields } from './TimeWindowFields';
+import { PixelEditor, type ArtState } from './PixelEditor';
+import { MAX_ART_HEIGHT, MAX_ART_WIDTH, decodePixels, encodePixels, resizePixels } from '../pixelart';
 
+
+const blankArt = (): ArtState => ({ width: 128, height: 32, palette: ['#000000', '#ffffff'], pixels: new Uint8Array(128 * 32) });
 
 const FALLBACK_TIMEZONES = [
   'America/New_York',
@@ -83,6 +87,8 @@ export function AddWidgetModal({
   const [spotifyArt, setSpotifyArt] = useState('pixel-8');
   // null until loaded (or if the status request failed)
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
+
+  const [art, setArt] = useState<ArtState>(blankArt);
 
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
@@ -175,6 +181,13 @@ export function AddWidgetModal({
           setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
           setSpotifyArt(config.artStyle === 'detail' ? 'detail' : `pixel-${[4, 16].includes(config.artBlocks) ? config.artBlocks : 8}`);
           break;
+        case 'pixelart': {
+          const width = Number.isInteger(config.width) ? config.width : 128;
+          const height = Number.isInteger(config.height) ? config.height : 32;
+          const palette: string[] = Array.isArray(config.palette) && config.palette.length > 0 ? config.palette : ['#000000'];
+          setArt({ width, height, palette, pixels: decodePixels(String(config.pixels ?? ''), width * height) });
+          break;
+        }
         case 'countdown':
           setCountdownMessage(typeof config.message === 'string' ? config.message : '');
           setCountdownColor(typeof config.color === 'string' ? config.color : '#FFB000');
@@ -198,6 +211,7 @@ export function AddWidgetModal({
       setSpotifyShowProgress(true);
       setSpotifyProgressPosition('top');
       setSpotifyArt('pixel-8');
+      setArt(blankArt());
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -349,6 +363,14 @@ export function AddWidgetModal({
         return { showOriginInitials };
       case 'spotify':
         return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, ...spotifyArtConfig() };
+      case 'pixelart':
+        return {
+          width: art.width,
+          height: art.height,
+          background: art.palette[0],
+          palette: art.palette,
+          pixels: encodePixels(art.pixels),
+        };
       case 'countdown':
         return {
           message: countdownMessage.trim(),
@@ -426,6 +448,7 @@ export function AddWidgetModal({
     { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
     { id: 'countdown', title: 'Countdown', description: 'A message and the time left until a date.', label: 'CDN' },
     { id: 'spotify', title: 'Now Playing', description: 'Album art and track from Spotify, only while playing.', label: 'SPT' },
+    { id: 'pixelart', title: 'Pixel Art', description: 'Draw a picture or import an image to show on the board.', label: 'ART' },
   ];
 
   return (
@@ -522,6 +545,32 @@ export function AddWidgetModal({
                     />
                     Enable scrolling
                   </label>
+                </>
+              )}
+
+              {widgetType === 'pixelart' && (
+                <>
+                  <div className="mb-4 flex flex-wrap items-end gap-3">
+                    {([['Width', 'width', MAX_ART_WIDTH], ['Height', 'height', MAX_ART_HEIGHT]] as const).map(([label, key, max]) => (
+                      <div key={key}>
+                        <label className="tb-label">{label}</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={max}
+                          value={art[key]}
+                          onChange={(e) => {
+                            const n = Math.max(1, Math.min(max, Math.round(Number(e.target.value)) || 1));
+                            const next = { ...art, [key]: n };
+                            setArt({ ...next, pixels: resizePixels(art.pixels, art.width, art.height, next.width, next.height, 0) });
+                          }}
+                          className="tb-input w-24"
+                        />
+                      </div>
+                    ))}
+                    <p className="pb-2 text-xs text-ops-300">Board is 128×32. Smaller art is centered on the first palette color.</p>
+                  </div>
+                  <PixelEditor value={art} onChange={setArt} />
                 </>
               )}
 
@@ -927,6 +976,12 @@ export function AddWidgetModal({
                 <p><strong>Show only:</strong> {showOnly ? 'On' : 'Off'}</p>
                 <p><strong>Schedule:</strong> {scheduleEnabled ? describeSchedule(buildSchedule()!) : 'Always on'}</p>
               </div>
+              {widgetType === 'pixelart' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Size:</strong> {art.width}×{art.height}</p>
+                  <p><strong>Colors:</strong> {new Set(art.pixels).size} used of {art.palette.length}</p>
+                </div>
+              )}
               {widgetType === 'spotify' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Title color:</strong> {spotifyColor}</p>

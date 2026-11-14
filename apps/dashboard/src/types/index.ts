@@ -40,7 +40,7 @@ export interface DisplaySettingsUpdate {
 }
 
 // Widget types
-export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify';
+export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify' | 'pixelart';
 
 
 export interface BaseWidget {
@@ -116,6 +116,20 @@ export interface SpotifyWidget extends BaseWidget {
   };
 }
 
+export interface PixelArtWidget extends BaseWidget {
+  type: 'pixelart';
+  config: {
+    width: number;
+    height: number;
+    /** Color around art smaller than the board; same as palette[0] */
+    background?: string;
+    /** "#RRGGBB" colors, at most 64 */
+    palette: string[];
+    /** base64 of width*height bytes: palette index per pixel, row-major from the top-left */
+    pixels: string;
+  };
+}
+
 /** Whether the backend's one Spotify account is set up (never includes tokens) */
 export interface SpotifyStatus {
   /** SPOTIFY_CLIENT_ID is set on the backend */
@@ -124,7 +138,7 @@ export interface SpotifyStatus {
   displayName: string | null;
 }
 
-export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget;
+export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget | PixelArtWidget;
 
 // Widget config types for creation/update
 export type WidgetConfig = 
@@ -132,7 +146,8 @@ export type WidgetConfig =
   | MessageWidget['config']
   | ClockWidget['config']
   | CountdownWidget['config']
-  | SpotifyWidget['config'];
+  | SpotifyWidget['config']
+  | PixelArtWidget['config'];
 
 export interface CreateWidgetRequest {
   type: WidgetType;
