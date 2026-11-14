@@ -20,6 +20,8 @@ export interface AgentSession {
 
 /** A "working" session that has been silent this long is probably stuck or gone; shown as idle. */
 export const WORKING_STALE_MS = 30 * 60 * 1000;
+/** An idle session is dropped this long after it went idle. */
+export const IDLE_FORGET_MS = 2 * 60 * 1000;
 /** Sessions with no event at all for this long are forgotten. */
 export const FORGET_MS = 12 * 60 * 60 * 1000;
 
@@ -85,7 +87,10 @@ export class AgentRegistry {
         this.sessions.delete(id);
         continue;
       }
-      out.push(s.state === "working" && age > WORKING_STALE_MS ? { ...s, state: "idle", since: s.updatedAt + WORKING_STALE_MS, tool: undefined } : s);
+      const session: AgentSession =
+        s.state === "working" && age > WORKING_STALE_MS ? { ...s, state: "idle", since: s.updatedAt + WORKING_STALE_MS, tool: undefined } : s;
+      if (session.state === "idle" && now - session.since > IDLE_FORGET_MS) continue;
+      out.push(session);
     }
     return out.sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.updatedAt - a.updatedAt);
   }

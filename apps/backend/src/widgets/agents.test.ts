@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { AgentsWidgetPlugin, blobColor, formatAge } from "./agents.js";
-import { AgentRegistry, FORGET_MS, WORKING_STALE_MS, parseHookEvent } from "../services/agents.js";
+import { AgentRegistry, FORGET_MS, IDLE_FORGET_MS, WORKING_STALE_MS, parseHookEvent } from "../services/agents.js";
 
 const hook = (hook_event_name: string, session_id = "s1", cwd = "/Users/me/Projects/transit-board") => ({ hook_event_name, session_id, cwd });
 
@@ -55,6 +55,16 @@ describe("agent registry", () => {
     send("UserPromptSubmit", "a", 0);
     expect(registry.list(WORKING_STALE_MS + 1)[0]!.state).toBe("idle");
     expect(registry.list(FORGET_MS + 1)).toEqual([]);
+  });
+
+  test("an idle session disappears two minutes after going idle", () => {
+    send("SessionStart", "a", 0);
+    expect(registry.list(IDLE_FORGET_MS - 1)).toHaveLength(1);
+    expect(registry.list(IDLE_FORGET_MS + 1)).toEqual([]);
+
+    send("UserPromptSubmit", "b", 0);
+    expect(registry.list(WORKING_STALE_MS + IDLE_FORGET_MS - 1)).toHaveLength(1);
+    expect(registry.list(WORKING_STALE_MS + IDLE_FORGET_MS + 1)).toEqual([]);
   });
 });
 
