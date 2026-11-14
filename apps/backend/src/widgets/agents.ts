@@ -7,6 +7,11 @@ import { toDisplayText } from "./spotify.js";
 
 export const SHOW_WHEN_CHOICES = ["attention", "active", "always"] as const;
 type ShowWhen = (typeof SHOW_WHEN_CHOICES)[number];
+export const LAYOUT_CHOICES = ["detail", "grid"] as const;
+type Layout = (typeof LAYOUT_CHOICES)[number];
+
+/** Most sessions the detail layout pages through, so a pile of idle ones can't take over the rotation. */
+const MAX_DETAIL_PAGES = 6;
 
 const CELL_WIDTH = 64;
 const SPRITE = 12;
@@ -47,14 +52,22 @@ export function blobColor(sessionId: string): RGB {
 
 const dim = (c: RGB, f: number): RGB => [Math.round(c[0] * f), Math.round(c[1] * f), Math.round(c[2] * f)];
 
-/** Draw one blob with its top-left at (x, y). The face shows the state; attention adds an amber "!". */
-export function drawBlob(canvas: Canvas, x: number, y: number, base: RGB, state: AgentState): void {
+/** "40s", "5m", "2h": how long a session has been in its state. */
+export function formatAge(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  return `${Math.floor(sec / 3600)}h`;
+}
+
+/** Draw one blob with its top-left at (x, y), each sprite pixel `scale` pixels square. The face shows the state. */
+export function drawBlob(canvas: Canvas, x: number, y: number, base: RGB, state: AgentState, scale = 1): void {
   const body = state === "idle" ? dim(base, 0.4) : base;
+  const rect = (dx: number, dy: number, w: number, h: number, c: RGB) => canvas.fillRect(x + dx * scale, y + dy * scale, w * scale, h * scale, c);
+  const px = (dx: number, dy: number, c: RGB) => rect(dx, dy, 1, 1, c);
   BODY.forEach((row, dy) => {
-    for (let dx = 0; dx < SPRITE; dx++) if (row[dx] === "X") canvas.setPixel(x + dx, y + dy, body);
+    for (let dx = 0; dx < SPRITE; dx++) if (row[dx] === "X") px(dx, dy, body);
   });
-  const px = (dx: number, dy: number, c: RGB) => canvas.setPixel(x + dx, y + dy, c);
-  const rect = (dx: number, dy: number, w: number, h: number, c: RGB) => canvas.fillRect(x + dx, y + dy, w, h, c);
 
   switch (state) {
     case "idle": // asleep
@@ -95,7 +108,7 @@ export class AgentsWidgetPlugin implements WidgetPlugin {
   type = "agents";
   name = "Claude Agents";
   description = "See which Claude Code sessions are working or need attention";
-  defaultConfig: { showWhen: ShowWhen } = { showWhen: "attention" };
+  defaultConfig: { showWhen: ShowWhen; layout: Layout } = { showWhen: "attention", layout: "detail" };
 
   validateConfig(config: any): boolean {
     if (!config || typeof config !== "object") {
@@ -104,6 +117,9 @@ export class AgentsWidgetPlugin implements WidgetPlugin {
     if (config.showWhen !== undefined && !SHOW_WHEN_CHOICES.includes(config.showWhen)) {
       throw new Error(`showWhen must be one of ${SHOW_WHEN_CHOICES.join(", ")}`);
     }
+    if (config.layout !== undefined && !LAYOUT_CHOICES.includes(config.layout)) {
+      throw new Error(`layout must be one of ${LAYOUT_CHOICES.join(", ")}`);
+    }
     return true;
   }
 
@@ -111,7 +127,8 @@ export class AgentsWidgetPlugin implements WidgetPlugin {
     this.validateConfig(config);
     const showWhen: ShowWhen = config.showWhen ?? this.defaultConfig.showWhen;
     const sessions: AgentSession[] = agentRegistry.list();
-    return { showWhen, sessions };
+    const layout: Layout = config.layout ?? this.defaultConfig.layout;
+    return { showWhen, layout, sessions, now: Date.now() };
   }
 
   isVisible(data: any): boolean {
@@ -128,6 +145,35 @@ export class AgentsWidgetPlugin implements WidgetPlugin {
 
   render(data: any, ctx: RenderContext): Canvas[] {
     const sessions: AgentSession[] = data.sessions ?? [];
+    return data.layout === "grid" ? this.renderGrid(sessions, ctx) : this.renderDetail(sessions, data.now ?? Date.now(), ctx);
+  }
+
+  /** One page per session: a big blob, the project name, and the state with how long it has lasted. */
+  private renderDetail(sessions: AgentSession[], now: number, ctx: RenderContext): Canvas[] {
+    if (sessions.length === 0) return this.renderGrid(sessions, ctx);
+    const textX = SPRITE * 2 + 8;
+    const maxChars = Math.max(0, Math.floor((ctx.width - textX - 2) / CHAR_WIDTH));
+
+    return sessions.slice(0, MAX_DETAIL_PAGES).map((s) => {
+      const canvas = new Canvas(ctx.width, ctx.height);
+      drawBlob(canvas, 2, Math.floor((ctx.height - SPRITE * 2) / 2), blobColor(s.id), s.state, 2);
+      if (s.state === "attention") drawBang(canvas, SPRITE * 2 + 4, 4);
+
+      const age = formatAge(now - s.since);
+      const tool = s.tool ? toDisplayText(s.tool) : "";
+      const status = {
+        attention: `NEEDS YOU ${age}`,
+        done: `DONE ${age}`,
+        working: tool ? `${tool} ${age}` : `WORKING ${age}`,
+        idle: `IDLE ${age}`,
+      }[s.state];
+      canvas.text(toDisplayText(s.project).slice(0, maxChars), textX, ROW_HEIGHT / 2, s.state === "idle" ? NAME_COLOR.idle : [255, 255, 255]);
+      canvas.text(status.slice(0, maxChars), textX, ROW_HEIGHT + ROW_HEIGHT / 2, NAME_COLOR[s.state]);
+      return canvas;
+    });
+  }
+
+  private renderGrid(sessions: AgentSession[], ctx: RenderContext): Canvas[] {
     const cols = Math.max(1, Math.floor(ctx.width / CELL_WIDTH));
     const rows = Math.max(1, Math.floor(ctx.height / ROW_HEIGHT));
     const perPage = cols * rows;

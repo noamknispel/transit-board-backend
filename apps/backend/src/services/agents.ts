@@ -12,6 +12,10 @@ export interface AgentSession {
   state: AgentState;
   /** ms since epoch of the last event */
   updatedAt: number;
+  /** ms since epoch when `state` last changed (a stream of tool events doesn't reset it) */
+  since: number;
+  /** Tool the session is running right now, while working */
+  tool?: string;
 }
 
 /** A "working" session that has been silent this long is probably stuck or gone; shown as idle. */
@@ -19,7 +23,7 @@ export const WORKING_STALE_MS = 30 * 60 * 1000;
 /** Sessions with no event at all for this long are forgotten. */
 export const FORGET_MS = 12 * 60 * 60 * 1000;
 
-export type HookResult = { sessionId: string; project: string; state: AgentState | "ended" };
+export type HookResult = { sessionId: string; project: string; state: AgentState | "ended"; tool?: string };
 
 /**
  * Turn a Claude Code hook payload (the JSON a hook receives on stdin) into a
@@ -29,7 +33,7 @@ export type HookResult = { sessionId: string; project: string; state: AgentState
  */
 export function parseHookEvent(body: unknown, projectName?: string | null): HookResult | null {
   if (!body || typeof body !== "object") return null;
-  const { session_id, cwd, hook_event_name } = body as Record<string, unknown>;
+  const { session_id, cwd, hook_event_name, tool_name } = body as Record<string, unknown>;
   if (typeof session_id !== "string" || !session_id || typeof hook_event_name !== "string") return null;
   const project =
     projectName?.trim() || (typeof cwd === "string" && cwd ? basename(cwd.replace(/[\\/]+$/, "")) || cwd : "session");
@@ -38,8 +42,9 @@ export function parseHookEvent(body: unknown, projectName?: string | null): Hook
     case "SessionStart":
       return { sessionId: session_id, project, state: "idle" };
     case "UserPromptSubmit":
-    case "PostToolUse": // runs again once a permission prompt has been answered
       return { sessionId: session_id, project, state: "working" };
+    case "PostToolUse": // runs again once a permission prompt has been answered
+      return { sessionId: session_id, project, state: "working", tool: typeof tool_name === "string" ? tool_name : undefined };
     case "Notification": // permission prompt, or waiting for input
       return { sessionId: session_id, project, state: "attention" };
     case "Stop":
@@ -60,11 +65,14 @@ export class AgentRegistry {
       this.sessions.delete(event.sessionId);
       return;
     }
+    const previous = this.sessions.get(event.sessionId);
     this.sessions.set(event.sessionId, {
       id: event.sessionId,
       project: event.project,
       state: event.state,
       updatedAt: now,
+      since: previous && previous.state === event.state ? previous.since : now,
+      tool: event.tool,
     });
   }
 
@@ -77,7 +85,7 @@ export class AgentRegistry {
         this.sessions.delete(id);
         continue;
       }
-      out.push(s.state === "working" && age > WORKING_STALE_MS ? { ...s, state: "idle" } : s);
+      out.push(s.state === "working" && age > WORKING_STALE_MS ? { ...s, state: "idle", since: s.updatedAt + WORKING_STALE_MS, tool: undefined } : s);
     }
     return out.sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.updatedAt - a.updatedAt);
   }

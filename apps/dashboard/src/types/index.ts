@@ -135,6 +135,8 @@ export interface AgentsWidget extends BaseWidget {
   config: {
     /** attention (default): needs you or finished; active: anything not idle; always */
     showWhen?: 'attention' | 'active' | 'always';
+    /** detail (default): a page per session with its state and time; grid: four per page */
+    layout?: 'detail' | 'grid';
   };
 }
 

@@ -99,6 +99,7 @@ export function AddWidgetModal({
   const [art, setArt] = useState<ArtState>(blankArt);
 
   const [agentsShowWhen, setAgentsShowWhen] = useState<'attention' | 'active' | 'always'>('attention');
+  const [agentsLayout, setAgentsLayout] = useState<'detail' | 'grid'>('detail');
   const [hooksCopied, setHooksCopied] = useState(false);
 
   const [messageText, setMessageText] = useState('');
@@ -194,6 +195,7 @@ export function AddWidgetModal({
           break;
         case 'agents':
           setAgentsShowWhen(config.showWhen === 'active' || config.showWhen === 'always' ? config.showWhen : 'attention');
+          setAgentsLayout(config.layout === 'grid' ? 'grid' : 'detail');
           break;
         case 'pixelart': {
           const width = Number.isInteger(config.width) ? config.width : 128;
@@ -227,6 +229,7 @@ export function AddWidgetModal({
       setSpotifyArt('pixel-8');
       setArt(blankArt());
       setAgentsShowWhen('attention');
+      setAgentsLayout('detail');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -379,7 +382,7 @@ export function AddWidgetModal({
       case 'spotify':
         return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, ...spotifyArtConfig() };
       case 'agents':
-        return { showWhen: agentsShowWhen };
+        return { showWhen: agentsShowWhen, layout: agentsLayout };
       case 'pixelart':
         return {
           width: art.width,
@@ -577,6 +580,15 @@ export function AddWidgetModal({
                     <option value="attention">When a session needs you or has finished</option>
                     <option value="active">While any session is working</option>
                     <option value="always">Always</option>
+                  </select>
+                  <label className="tb-label">Layout</label>
+                  <select
+                    value={agentsLayout}
+                    onChange={(e) => setAgentsLayout(e.target.value as typeof agentsLayout)}
+                    className="tb-select mb-4"
+                  >
+                    <option value="detail">One session per page, with its state and time</option>
+                    <option value="grid">Four sessions per page</option>
                   </select>
                   <p className="mb-2 text-sm text-ops-200">
                     Sessions report in through Claude Code hooks. Add this to <code>~/.claude/settings.json</code> on each
@@ -1031,6 +1043,7 @@ export function AddWidgetModal({
               </div>
               {widgetType === 'agents' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Layout:</strong> {agentsLayout === 'grid' ? 'Four per page' : 'One session per page'}</p>
                   <p><strong>Shown:</strong> {{ attention: 'When a session needs you or has finished', active: 'While any session is working', always: 'Always' }[agentsShowWhen]}</p>
                 </div>
               )}

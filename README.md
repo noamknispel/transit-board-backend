@@ -61,7 +61,9 @@ Shows a blob for each local Claude Code session with its project name, so you ca
 | Focused face | Working | `UserPromptSubmit`, `PostToolUse` |
 | Asleep, dim | Idle (also a working session silent for 30 min) | `SessionStart` |
 
-A session is removed on `SessionEnd`, or after 12 hours without an event. Each session keeps the same blob color, picked from its id. The board shows four sessions per page, needs-you first, and names are cut to 7 characters.
+A session is removed on `SessionEnd`, or after 12 hours without an event. Each session keeps the same blob color, picked from its id. Needs-you sessions come first.
+
+The default "detail" layout gives each session its own page (up to 6): a larger blob, the project name, and the state with how long it has lasted (`NEEDS YOU 40s`, `DONE 5m`, `IDLE 2h`). While working it shows the current tool instead (`Edit 2m`). The "grid" layout fits four sessions per page with names cut to 7 characters.
 
 1. Add a "Claude Agents" widget from the dashboard and choose when it shows: when a session needs you or has finished (default), while any is working, or always.
 2. Copy the hooks snippet from the widget's setup step. It looks like this, with your backend's address in place of `PI_ADDRESS`:
