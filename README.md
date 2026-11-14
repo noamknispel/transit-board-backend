@@ -56,10 +56,10 @@ Shows a blob for each local Claude Code session with its project name, so you ca
 
 | Blob | Meaning | Hook event |
 | --- | --- | --- |
-| Amber `!`, wide eyes | Needs you (permission prompt or waiting for input) | `Notification` |
+| Amber `!`, wide eyes | Needs you (permission prompt or waiting for input); never goes idle | `Notification` |
 | Green, smiling | Finished its turn | `Stop` |
 | Focused face | Working | `UserPromptSubmit`, `PostToolUse` |
-| Asleep, dim | Idle (also a working session silent for 30 min) | `SessionStart` |
+| Asleep, dim | Idle: a new session, a session 1 minute after it finished, or a working session silent for 2 hours | `SessionStart` |
 
 A session is removed on `SessionEnd`, 2 minutes after it goes idle, or after 12 hours without an event. Each session keeps the same blob color, picked from its id. Needs-you sessions come first.
 

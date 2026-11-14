@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { AgentsWidgetPlugin, blobColor, formatAge } from "./agents.js";
-import { AgentRegistry, FORGET_MS, IDLE_FORGET_MS, WORKING_STALE_MS, parseHookEvent } from "../services/agents.js";
+import { AgentRegistry, FORGET_MS, IDLE_FORGET_MS, DONE_MS, WORKING_STALE_MS, parseHookEvent } from "../services/agents.js";
 
 const hook = (hook_event_name: string, session_id = "s1", cwd = "/Users/me/Projects/transit-board") => ({ hook_event_name, session_id, cwd });
 
@@ -49,6 +49,18 @@ describe("agent registry", () => {
     send("Stop", "a", 1000);
     send("SessionEnd", "a", 2000);
     expect(registry.list(3000)).toEqual([]);
+  });
+
+  test("a finished session goes idle after a minute, then disappears", () => {
+    send("Stop", "a", 0);
+    expect(registry.list(DONE_MS - 1)[0]!.state).toBe("done");
+    expect(registry.list(DONE_MS + 1)[0]!.state).toBe("idle");
+    expect(registry.list(DONE_MS + IDLE_FORGET_MS + 1)).toEqual([]);
+  });
+
+  test("a session that needs you never goes idle", () => {
+    send("Notification", "a", 0);
+    expect(registry.list(WORKING_STALE_MS * 3)[0]!.state).toBe("attention");
   });
 
   test("silent working sessions go idle, and old ones are forgotten", () => {
