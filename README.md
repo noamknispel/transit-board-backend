@@ -14,7 +14,7 @@ transit-board-backend/
 
 ## Features
 
-- **Widget System**: Transit arrivals, custom messages, clock, countdown, and Spotify "Now Playing" displays
+- **Widget System**: Transit arrivals, custom messages, clock, countdown, Spotify "Now Playing", pixel art, and Claude agent status displays
 - **React Dashboard**: Web UI for managing devices and widgets with drag-and-drop reordering
 - **Real-time Data**: Live MTA subway arrivals via GTFS-RT feeds
 - **Multi-Device Support**: Manage multiple transit boards from one backend
@@ -49,6 +49,53 @@ Shows album art, track and artist while something is playing; it drops out of th
 2. Put the app's client ID in `apps/backend/.env` as `SPOTIFY_CLIENT_ID` (no client secret is needed).
 3. Run `bun run spotify:connect` from `apps/backend` and approve access. If your browser is on another machine than the backend, the callback page won't load: paste the URL from the address bar back into the terminal.
 4. Add a "Now Playing" widget from the dashboard.
+
+## Claude Agents widget
+
+Shows a blob for each local Claude Code session with its project name, so you can see which ones need you. Sessions report in through Claude Code hooks; the backend keeps them in memory, so a restart starts empty until sessions report again.
+
+| Blob | Meaning | Hook event |
+| --- | --- | --- |
+| Amber `!`, wide eyes | Needs you (permission prompt or waiting for input) | `Notification` |
+| Green, smiling | Finished its turn | `Stop` |
+| Focused face | Working | `UserPromptSubmit`, `PostToolUse` |
+| Asleep, dim | Idle (also a working session silent for 30 min) | `SessionStart` |
+
+A session is removed on `SessionEnd`, or after 12 hours without an event. Each session keeps the same blob color, picked from its id. The board shows four sessions per page, needs-you first, and names are cut to 7 characters.
+
+1. Add a "Claude Agents" widget from the dashboard and choose when it shows: when a session needs you or has finished (default), while any is working, or always.
+2. Copy the hooks snippet from the widget's setup step. It looks like this, with your backend's address in place of `PI_ADDRESS`:
+
+   ```json
+   {
+     "hooks": {
+       "Notification": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "curl -s -m 2 -X POST -H 'content-type: application/json' -H \"x-project: $(basename \"$CLAUDE_PROJECT_DIR\")\" --data-binary @- http://PI_ADDRESS:3010/agents/events || true"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+   The real snippet repeats that entry for `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd`.
+3. Merge it into `~/.claude/settings.json` on each machine whose sessions you want to see (or a project's `.claude/settings.json` for that project only), then restart those sessions. Merge by hand if you already have a `hooks` section.
+4. Check it works: `curl http://PI_ADDRESS:3010/agents` lists the sessions the backend knows about.
+
+Sessions are named after the project folder Claude was started in (`$CLAUDE_PROJECT_DIR`), not the folder it has since moved into. Without the `x-project` header the backend falls back to the hook's `cwd`.
+
+To require a token, set `AGENTS_TOKEN` in `apps/backend/.env` and add `?token=...` to the URL in the hook command. Without it, anyone on your network can post events. `PostToolUse` fires on every tool call; you can drop it from the snippet, and the board will then only go back to "working" on your next prompt after you answer a permission prompt.
+
+Cloud sessions are not covered: they can't reach a Pi on your home network.
+
+## Pixel Art widget
+
+Shows a picture you draw or import in the dashboard. The editor has pencil, eraser, fill, eyedropper, undo/redo and a palette of up to 64 colors; colors snap to the 32 levels per channel the panel can show. "Import image" fits a PNG/JPG inside the canvas and reduces its colors. The canvas defaults to the board's 128×32; smaller art is centered over the first palette color, and larger art is cropped.
 
 ## Deployment to Raspberry Pi
 
@@ -263,6 +310,15 @@ session on the Pi while the backend is running.
 - Shows the target date on the right (or the time, when it's today)
 - Disappears once the date passes
 
+**Now Playing Widget**
+- Album art, track and artist from Spotify; hidden while paused (see "Spotify" above)
+
+**Pixel Art Widget**
+- A picture drawn or imported in the dashboard (see "Pixel Art" above)
+
+**Claude Agents Widget**
+- A blob and project name for each local Claude Code session, with amber for the ones that need you (see "Claude Agents" above)
+
 ### Widget Management
 - **Schedule**: limit a widget to certain days and times (e.g. transit on weekday
   mornings). Inside its window it joins the rotation with the always-on widgets;
@@ -301,6 +357,10 @@ session on the Pi while the backend is running.
   ```
   `days` uses 0 = Sunday … 6 = Saturday (empty = every day). Device responses include `isOn`
   (whether the display is lit right now) and `offBy` (index of the off time in effect, or null).
+
+### Claude Agents
+- `POST /agents/events` - Claude Code hook payload in, session state updated (`x-project` header names the project; `?token=` when `AGENTS_TOKEN` is set)
+- `GET /agents` - Sessions the backend currently knows about
 
 ### Widgets
 - `GET /devices/:deviceId/widgets` - List widgets for a device
