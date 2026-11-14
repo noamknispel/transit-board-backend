@@ -133,8 +133,8 @@ export interface PixelArtWidget extends BaseWidget {
 export interface AgentsWidget extends BaseWidget {
   type: 'agents';
   config: {
-    /** attention (default): needs you or finished; active: anything not idle; always */
-    showWhen?: 'attention' | 'active' | 'always';
+    /** attention (default): needs you or finished; active: anything not idle; any: any session at all; always */
+    showWhen?: 'attention' | 'active' | 'any' | 'always';
     /** detail (default): a page per session with its state and time; grid: four per page */
     layout?: 'detail' | 'grid';
   };

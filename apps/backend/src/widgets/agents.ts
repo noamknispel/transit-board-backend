@@ -5,7 +5,7 @@ import { ROW_HEIGHT, type RenderContext } from "../render/layout.js";
 import { agentRegistry, type AgentSession, type AgentState } from "../services/agents.js";
 import { toDisplayText } from "./spotify.js";
 
-export const SHOW_WHEN_CHOICES = ["attention", "active", "always"] as const;
+export const SHOW_WHEN_CHOICES = ["attention", "active", "any", "always"] as const;
 type ShowWhen = (typeof SHOW_WHEN_CHOICES)[number];
 export const LAYOUT_CHOICES = ["detail", "grid"] as const;
 type Layout = (typeof LAYOUT_CHOICES)[number];
@@ -138,6 +138,8 @@ export class AgentsWidgetPlugin implements WidgetPlugin {
         return true;
       case "active":
         return sessions.some((s) => s.state !== "idle");
+      case "any":
+        return sessions.length > 0;
       default:
         return sessions.some((s) => s.state === "attention" || s.state === "done");
     }

@@ -25,6 +25,7 @@ interface WidgetCardProps {
 const AGENTS_SHOW_LABEL = {
   attention: 'when one needs you',
   active: 'while any are working',
+  any: 'while any session exists',
   always: 'always',
 } as const;
 

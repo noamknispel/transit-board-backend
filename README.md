@@ -65,7 +65,7 @@ A session is removed on `SessionEnd`, 2 minutes after it goes idle, or after 12 
 
 The default "detail" layout gives each session its own page (up to 6): a larger blob, the project name, and the state with how long it has lasted (`NEEDS YOU 40s`, `DONE 5m`, `IDLE 2h`). While working it shows the current tool instead (`Edit 2m`). The "grid" layout fits four sessions per page with names cut to 7 characters.
 
-1. Add a "Claude Agents" widget from the dashboard and choose when it shows: when a session needs you or has finished (default), while any is working, or always.
+1. Add a "Claude Agents" widget from the dashboard and choose when it shows: when a session needs you or has finished (default), while any is working, whenever any session exists in any state, or always.
 2. Copy the hooks snippet from the widget's setup step. It looks like this, with your backend's address in place of `PI_ADDRESS`:
 
    ```json

@@ -98,7 +98,7 @@ export function AddWidgetModal({
 
   const [art, setArt] = useState<ArtState>(blankArt);
 
-  const [agentsShowWhen, setAgentsShowWhen] = useState<'attention' | 'active' | 'always'>('attention');
+  const [agentsShowWhen, setAgentsShowWhen] = useState<'attention' | 'active' | 'any' | 'always'>('attention');
   const [agentsLayout, setAgentsLayout] = useState<'detail' | 'grid'>('detail');
   const [hooksCopied, setHooksCopied] = useState(false);
 
@@ -194,7 +194,7 @@ export function AddWidgetModal({
           setSpotifyArt(config.artStyle === 'detail' ? 'detail' : `pixel-${[4, 16].includes(config.artBlocks) ? config.artBlocks : 8}`);
           break;
         case 'agents':
-          setAgentsShowWhen(config.showWhen === 'active' || config.showWhen === 'always' ? config.showWhen : 'attention');
+          setAgentsShowWhen(config.showWhen === 'active' || config.showWhen === 'any' || config.showWhen === 'always' ? config.showWhen : 'attention');
           setAgentsLayout(config.layout === 'grid' ? 'grid' : 'detail');
           break;
         case 'pixelart': {
@@ -579,7 +579,8 @@ export function AddWidgetModal({
                   >
                     <option value="attention">When a session needs you or has finished</option>
                     <option value="active">While any session is working</option>
-                    <option value="always">Always</option>
+                    <option value="any">Whenever any session exists, in any state</option>
+                    <option value="always">Always, even with no sessions</option>
                   </select>
                   <label className="tb-label">Layout</label>
                   <select
@@ -1044,7 +1045,7 @@ export function AddWidgetModal({
               {widgetType === 'agents' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Layout:</strong> {agentsLayout === 'grid' ? 'Four per page' : 'One session per page'}</p>
-                  <p><strong>Shown:</strong> {{ attention: 'When a session needs you or has finished', active: 'While any session is working', always: 'Always' }[agentsShowWhen]}</p>
+                  <p><strong>Shown:</strong> {{ attention: 'When a session needs you or has finished', active: 'While any session is working', any: 'Whenever any session exists', always: 'Always' }[agentsShowWhen]}</p>
                 </div>
               )}
               {widgetType === 'pixelart' && (

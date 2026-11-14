@@ -80,6 +80,8 @@ describe("agents widget", () => {
     expect(plugin.isVisible({ showWhen: "attention", sessions: attention })).toBe(true);
     expect(plugin.isVisible({ showWhen: "active", sessions: working })).toBe(true);
     expect(plugin.isVisible({ showWhen: "active", sessions: idle })).toBe(false);
+    expect(plugin.isVisible({ showWhen: "any", sessions: idle })).toBe(true);
+    expect(plugin.isVisible({ showWhen: "any", sessions: [] })).toBe(false);
     expect(plugin.isVisible({ showWhen: "always", sessions: [] })).toBe(true);
   });
 
