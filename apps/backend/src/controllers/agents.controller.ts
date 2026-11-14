@@ -10,12 +10,13 @@ const authorized = (req: Request): boolean => {
 
 /**
  * POST /agents/events - Body is the JSON a Claude Code hook receives on stdin
- * (session_id, cwd, hook_event_name), so a hook can pipe it straight here.
+ * (session_id, cwd, hook_event_name), so a hook can pipe it straight here. An
+ * optional x-project header names the project (see parseHookEvent).
  */
 export const postEvent = async (req: Request) => {
   if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => null);
-  const event = parseHookEvent(body);
+  const event = parseHookEvent(body, req.headers.get("x-project"));
   if (event) agentRegistry.apply(event);
   return Response.json({ ok: true, recorded: event !== null });
 };

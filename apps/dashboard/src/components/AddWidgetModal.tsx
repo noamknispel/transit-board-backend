@@ -11,7 +11,7 @@ const blankArt = (): ArtState => ({ width: 128, height: 32, palette: ['#000000',
 
 /** Claude Code hooks that pipe each event's JSON (session id, folder, event name) to this backend. */
 const agentHooksSnippet = (): string => {
-  const command = `curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- ${window.location.origin}/agents/events || true`;
+  const command = `curl -s -m 2 -X POST -H 'content-type: application/json' -H "x-project: $(basename "$CLAUDE_PROJECT_DIR")" --data-binary @- ${window.location.origin}/agents/events || true`;
   const hook = [{ hooks: [{ type: 'command', command }] }];
   const events = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
   return JSON.stringify({ hooks: Object.fromEntries(events.map((e) => [e, hook])) }, null, 2);

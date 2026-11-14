@@ -12,6 +12,12 @@ describe("hook events", () => {
     expect(parseHookEvent(hook("SessionEnd"))?.state).toBe("ended");
   });
 
+  test("the project name from the hook beats the cwd's folder", () => {
+    const sub = hook("Stop", "s1", "/Users/me/Projects/transit-board/apps/dashboard");
+    expect(parseHookEvent(sub)?.project).toBe("dashboard");
+    expect(parseHookEvent(sub, "transit-board")?.project).toBe("transit-board");
+  });
+
   test("ignores unknown events and junk", () => {
     expect(parseHookEvent(hook("PreCompact"))).toBeNull();
     expect(parseHookEvent({ hook_event_name: "Stop" })).toBeNull();

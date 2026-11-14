@@ -24,12 +24,15 @@ export type HookResult = { sessionId: string; project: string; state: AgentState
 /**
  * Turn a Claude Code hook payload (the JSON a hook receives on stdin) into a
  * session update. Returns null for events that say nothing about the state.
+ * `projectName` (the hook's $CLAUDE_PROJECT_DIR folder) wins over the cwd's
+ * folder, which follows `cd` into subfolders.
  */
-export function parseHookEvent(body: unknown): HookResult | null {
+export function parseHookEvent(body: unknown, projectName?: string | null): HookResult | null {
   if (!body || typeof body !== "object") return null;
   const { session_id, cwd, hook_event_name } = body as Record<string, unknown>;
   if (typeof session_id !== "string" || !session_id || typeof hook_event_name !== "string") return null;
-  const project = typeof cwd === "string" && cwd ? basename(cwd.replace(/[\\/]+$/, "")) || cwd : "session";
+  const project =
+    projectName?.trim() || (typeof cwd === "string" && cwd ? basename(cwd.replace(/[\\/]+$/, "")) || cwd : "session");
 
   switch (hook_event_name) {
     case "SessionStart":
