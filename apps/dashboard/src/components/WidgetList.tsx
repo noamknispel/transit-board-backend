@@ -1,7 +1,7 @@
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Widget } from '../types';
+import { UpdateWidgetRequest, Widget } from '../types';
 import { WidgetCard } from './WidgetCard';
 
 interface WidgetListProps {
@@ -10,14 +10,16 @@ interface WidgetListProps {
   onEdit: (widget: Widget) => void;
   onDelete: (widgetId: number) => void;
   onToggleEnabled: (widgetId: number, enabled: boolean) => void;
+  onUpdate: (widgetId: number, data: UpdateWidgetRequest) => void;
   onAddWidget: () => void;
 }
 
-function SortableWidget({ widget, onEdit, onDelete, onToggleEnabled }: { 
+function SortableWidget({ widget, onEdit, onDelete, onToggleEnabled, onUpdate }: { 
   widget: Widget; 
   onEdit: (widget: Widget) => void;
   onDelete: (widgetId: number) => void;
   onToggleEnabled: (widgetId: number, enabled: boolean) => void;
+  onUpdate: (widgetId: number, data: UpdateWidgetRequest) => void;
 }) {
   const {
     attributes,
@@ -40,6 +42,7 @@ function SortableWidget({ widget, onEdit, onDelete, onToggleEnabled }: {
         onEdit={onEdit}
         onDelete={onDelete}
         onToggleEnabled={onToggleEnabled}
+        onUpdate={onUpdate}
         isDragging={isDragging}
         dragHandleProps={listeners}
       />
@@ -47,7 +50,7 @@ function SortableWidget({ widget, onEdit, onDelete, onToggleEnabled }: {
   );
 }
 
-export function WidgetList({ widgets, onReorder, onEdit, onDelete, onToggleEnabled, onAddWidget }: WidgetListProps) {
+export function WidgetList({ widgets, onReorder, onEdit, onDelete, onToggleEnabled, onUpdate, onAddWidget }: WidgetListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -97,6 +100,7 @@ export function WidgetList({ widgets, onReorder, onEdit, onDelete, onToggleEnabl
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onToggleEnabled={onToggleEnabled}
+                onUpdate={onUpdate}
               />
             ))}
           </SortableContext>

@@ -5,13 +5,16 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "import:gtfs": "~/.bun/bin/bun src/cli/import-gtfs.ts"
+    "import:gtfs": "~/.bun/bin/bun src/cli/import-gtfs.ts",
+    "spotify:connect": "~/.bun/bin/bun src/cli/spotify-connect.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "bun-types": "latest"
   },
   "dependencies": {
     "gtfs-rt-bindings": "^4.9.0",
-    "gtfs-stream": "^3.0.0"
+    "gtfs-stream": "^3.0.0",
+    "jpeg-js": "^0.4.4"
   }
 }

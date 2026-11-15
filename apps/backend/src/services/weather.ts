@@ -1,7 +1,11 @@
+import type { WeatherIcon } from "../render/icons.js";
+
 interface WeatherResult {
   temp: number;
   unit: "F" | "C";
   summary: string;
+  icon: WeatherIcon;
+  isDay: boolean;
 }
 
 interface WeatherCacheEntry {
@@ -39,6 +43,17 @@ const WEATHER_CODE_SUMMARY: Record<number, string> = {
   96: "STORM",
   99: "STORM",
 };
+
+// WMO weather codes (https://open-meteo.com/en/docs) grouped by icon.
+function iconForCode(code: number): WeatherIcon {
+  if (code <= 1) return "clear";
+  if (code === 2) return "partly";
+  if (code === 3) return "cloudy";
+  if (code === 45 || code === 48) return "fog";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 95) return "storm";
+  return "rain";
+}
 
 export class WeatherService {
   private static readonly CACHE_TTL_MS =
@@ -88,7 +103,7 @@ export class WeatherService {
       "https://api.open-meteo.com/v1/forecast" +
       `?latitude=${latitude}` +
       `&longitude=${longitude}` +
-      "&current=temperature_2m,weather_code" +
+      "&current=temperature_2m,weather_code,is_day" +
       `&temperature_unit=${unitParam}` +
       "&timezone=auto";
 
@@ -111,6 +126,7 @@ export class WeatherService {
           current?: {
             temperature_2m?: number;
             weather_code?: number;
+            is_day?: number;
           };
         };
 
@@ -125,6 +141,8 @@ export class WeatherService {
           temp: Math.round(temperature),
           unit: temperatureUnit,
           summary: this.getSummary(weatherCode),
+          icon: iconForCode(weatherCode),
+          isDay: payload.current?.is_day !== 0,
         };
 
         WeatherService.cache.set(cacheKey, {

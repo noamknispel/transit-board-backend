@@ -1,10 +1,12 @@
 import { router } from "./router";
+import { startSerialLog } from "./services/serial-log";
 
 // CORS middleware
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+  "Access-Control-Expose-Headers": "ETag",
 };
 
 const withCors = async (req: Request): Promise<Response> => {
@@ -41,3 +43,5 @@ const server = Bun.serve({
 console.log(
   `🚇 Transit board backend running at http://localhost:${server.port}`,
 );
+
+startSerialLog();

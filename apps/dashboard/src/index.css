@@ -16,8 +16,32 @@ body {
     linear-gradient(165deg, #071422 0%, #0b1f33 48%, #112c46 100%);
 }
 
+/* Safari tints the status bar and overscroll area with the page's root background,
+   which is white unless set: match the dark theme there (see also <meta name="theme-color">). */
+html {
+  background-color: #071422;
+  color-scheme: dark;
+}
+
 #root {
   min-height: 100vh;
+}
+
+/* iOS gives date/time inputs an intrinsic width that ignores w-full and pushes
+   them out of their card; let them shrink to the container. */
+input[type='time'],
+input[type='date'],
+input[type='datetime-local'] {
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type='time']::-webkit-date-and-time-value,
+input[type='date']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value {
+  text-align: left;
 }
 
 @layer components {

@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { CreateWidgetRequest, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, WidgetType } from '../types';
+import type { CreateWidgetRequest, SpotifyStatus, Subscription, UpdateWidgetRequest, Widget, WidgetConfig, TimeWindow, WidgetType } from '../types';
+import { browserTimezone, describeSchedule, toLocalInput } from '../schedule';
+import { TimeWindowFields } from './TimeWindowFields';
+import { PixelEditor, type ArtState } from './PixelEditor';
+import { MAX_ART_HEIGHT, MAX_ART_WIDTH, decodePixels, encodePixels, resizePixels } from '../pixelart';
+
+
+const blankArt = (): ArtState => ({ width: 128, height: 32, palette: ['#000000', '#ffffff'], pixels: new Uint8Array(128 * 32) });
+
+/** Claude Code hooks that pipe each event's JSON (session id, folder, event name) to this backend. */
+const agentHooksSnippet = (): string => {
+  const command = `curl -s -m 2 -X POST -H 'content-type: application/json' -H "x-project: $(basename "$CLAUDE_PROJECT_DIR")" --data-binary @- ${window.location.origin}/agents/events || true`;
+  const hook = [{ hooks: [{ type: 'command', command }] }];
+  const events = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
+  return JSON.stringify({ hooks: Object.fromEntries(events.map((e) => [e, hook])) }, null, 2);
+};
 
 const FALLBACK_TIMEZONES = [
   'America/New_York',
@@ -61,6 +76,31 @@ export function AddWidgetModal({
   const [widgetType, setWidgetType] = useState<WidgetType>('message');
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled] = useState(true);
+  const [showOnly, setShowOnly] = useState(false);
+
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleStart, setScheduleStart] = useState('07:00');
+  const [scheduleEnd, setScheduleEnd] = useState('09:00');
+  const [scheduleDays, setScheduleDays] = useState<number[]>([]);
+
+  const [countdownMessage, setCountdownMessage] = useState('');
+  const [countdownColor, setCountdownColor] = useState('#FFB000');
+  // datetime-local value, in the browser's timezone
+  const [countdownTarget, setCountdownTarget] = useState('');
+
+  const [spotifyColor, setSpotifyColor] = useState('#FFFFFF');
+  const [spotifyShowProgress, setSpotifyShowProgress] = useState(true);
+  const [spotifyProgressPosition, setSpotifyProgressPosition] = useState<'top' | 'bottom'>('top');
+  // 'detail', or 'pixel-<blocks across>'
+  const [spotifyArt, setSpotifyArt] = useState('pixel-8');
+  // null until loaded (or if the status request failed)
+  const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
+
+  const [art, setArt] = useState<ArtState>(blankArt);
+
+  const [agentsShowWhen, setAgentsShowWhen] = useState<'attention' | 'active' | 'any' | 'always'>('attention');
+  const [agentsLayout, setAgentsLayout] = useState<'detail' | 'grid'>('detail');
+  const [hooksCopied, setHooksCopied] = useState(false);
 
   const [messageText, setMessageText] = useState('');
   const [messageColor, setMessageColor] = useState('#00FF00');
@@ -99,12 +139,32 @@ export function AddWidgetModal({
 
   const isLastStep = stepIndex === steps.length - 1;
 
+  // Check the account whenever Now Playing is picked, so reopening after
+  // running the connect command shows the fresh state.
+  useEffect(() => {
+    if (!isOpen || widgetType !== 'spotify') return;
+    let cancelled = false;
+    setSpotifyStatus(null);
+    api.getSpotifyStatus().then(
+      (status) => !cancelled && setSpotifyStatus(status),
+      () => !cancelled && setSpotifyStatus({ configured: false, connected: false, displayName: null }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, widgetType]);
+
   useEffect(() => {
     if (editWidget) {
       const config = (editWidget.config || {}) as Record<string, any>;
       setWidgetType(editWidget.type);
       setDuration(editWidget.duration);
       setEnabled(editWidget.enabled);
+      setShowOnly(Boolean(editWidget.showOnly));
+      setScheduleEnabled(Boolean(editWidget.schedule));
+      setScheduleStart(editWidget.schedule?.start ?? '07:00');
+      setScheduleEnd(editWidget.schedule?.end ?? '09:00');
+      setScheduleDays(editWidget.schedule?.days ?? []);
 
       switch (editWidget.type) {
         case 'message':
@@ -127,12 +187,49 @@ export function AddWidgetModal({
         case 'transit':
           setShowOriginInitials(typeof config.showOriginInitials === 'boolean' ? config.showOriginInitials : false);
           break;
+        case 'spotify':
+          setSpotifyColor(typeof config.color === 'string' ? config.color : '#FFFFFF');
+          setSpotifyShowProgress(typeof config.showProgress === 'boolean' ? config.showProgress : true);
+          setSpotifyProgressPosition(config.progressPosition === 'bottom' ? 'bottom' : 'top');
+          setSpotifyArt(config.artStyle === 'detail' ? 'detail' : `pixel-${[4, 16].includes(config.artBlocks) ? config.artBlocks : 8}`);
+          break;
+        case 'agents':
+          setAgentsShowWhen(config.showWhen === 'active' || config.showWhen === 'any' || config.showWhen === 'always' ? config.showWhen : 'attention');
+          setAgentsLayout(config.layout === 'grid' ? 'grid' : 'detail');
+          break;
+        case 'pixelart': {
+          const width = Number.isInteger(config.width) ? config.width : 128;
+          const height = Number.isInteger(config.height) ? config.height : 32;
+          const palette: string[] = Array.isArray(config.palette) && config.palette.length > 0 ? config.palette : ['#000000'];
+          setArt({ width, height, palette, pixels: decodePixels(String(config.pixels ?? ''), width * height) });
+          break;
+        }
+        case 'countdown':
+          setCountdownMessage(typeof config.message === 'string' ? config.message : '');
+          setCountdownColor(typeof config.color === 'string' ? config.color : '#FFB000');
+          setCountdownTarget(typeof config.target === 'string' ? toLocalInput(config.target) : '');
+          break;
       }
       setStepIndex(0);
     } else {
       setWidgetType('message');
       setDuration(10);
       setEnabled(true);
+      setShowOnly(false);
+      setScheduleEnabled(false);
+      setScheduleStart('07:00');
+      setScheduleEnd('09:00');
+      setScheduleDays([]);
+      setCountdownMessage('');
+      setCountdownColor('#FFB000');
+      setCountdownTarget('');
+      setSpotifyColor('#FFFFFF');
+      setSpotifyShowProgress(true);
+      setSpotifyProgressPosition('top');
+      setSpotifyArt('pixel-8');
+      setArt(blankArt());
+      setAgentsShowWhen('attention');
+      setAgentsLayout('detail');
       setMessageText('');
       setMessageColor('#00FF00');
       setMessageScroll(true);
@@ -259,6 +356,11 @@ export function AddWidgetModal({
     }
   };
 
+  const spotifyArtConfig = (): { artStyle: 'pixel' | 'detail'; artBlocks?: 4 | 8 | 16 } => {
+    if (spotifyArt === 'detail') return { artStyle: 'detail' };
+    return { artStyle: 'pixel', artBlocks: Number(spotifyArt.slice(6)) as 4 | 8 | 16 };
+  };
+
   const buildConfig = (): WidgetConfig => {
     switch (widgetType) {
       case 'message':
@@ -277,9 +379,40 @@ export function AddWidgetModal({
       case 'transit':
         // Transit widget always uses all subscriptions configured for the device.
         return { showOriginInitials };
+      case 'spotify':
+        return { color: spotifyColor, showProgress: spotifyShowProgress, progressPosition: spotifyProgressPosition, ...spotifyArtConfig() };
+      case 'agents':
+        return { showWhen: agentsShowWhen, layout: agentsLayout };
+      case 'pixelart':
+        return {
+          width: art.width,
+          height: art.height,
+          background: art.palette[0],
+          palette: art.palette,
+          pixels: encodePixels(art.pixels),
+        };
+      case 'countdown':
+        return {
+          message: countdownMessage.trim(),
+          color: countdownColor,
+          // datetime-local is read in the browser's timezone
+          target: new Date(countdownTarget).toISOString(),
+          timezone: browserTimezone,
+        };
       default:
         return {};
     }
+  };
+
+  const buildSchedule = (): TimeWindow | null => {
+    if (!scheduleEnabled) return null;
+    return {
+      start: scheduleStart,
+      end: scheduleEnd,
+      // Keep the widget's timezone once set, so editing elsewhere doesn't shift it
+      timezone: editWidget?.schedule?.timezone ?? browserTimezone,
+      days: scheduleDays,
+    };
   };
 
   const validateCurrentStep = () => {
@@ -293,6 +426,14 @@ export function AddWidgetModal({
       if (widgetType === 'message') {
         return messageText.trim().length > 0;
       }
+      if (widgetType === 'countdown') {
+        const target = Date.parse(countdownTarget);
+        return countdownMessage.trim().length > 0 && !Number.isNaN(target) && target > Date.now();
+      }
+      if (widgetType === 'spotify') {
+        // Editing an existing widget never needs the account; adding one does.
+        return Boolean(editWidget) || Boolean(spotifyStatus?.connected);
+      }
       if (widgetType === 'clock') {
         const hasTimezone = (clockTimezone || '').trim().length > 0;
         const hasLocation = !clockShowWeather || (clockLatitude !== null && clockLongitude !== null);
@@ -302,7 +443,7 @@ export function AddWidgetModal({
     }
 
     if (currentStep === 'Display') {
-      return duration >= 1;
+      return duration >= 1 && (!scheduleEnabled || (Boolean(scheduleStart) && Boolean(scheduleEnd)));
     }
 
     return true;
@@ -310,9 +451,10 @@ export function AddWidgetModal({
 
   const handleSubmit = async () => {
     const config = buildConfig();
+    const schedule = buildSchedule();
     const data: CreateWidgetRequest | UpdateWidgetRequest = editWidget
-      ? { config, duration, enabled }
-      : { type: widgetType, config, duration, enabled };
+      ? { config, duration, enabled, showOnly, schedule }
+      : { type: widgetType, config, duration, enabled, showOnly, schedule };
 
     await onSave(data);
     onClose();
@@ -324,6 +466,10 @@ export function AddWidgetModal({
     { id: 'message', title: 'Message', description: 'Broadcast custom announcements and notices.', label: 'MSG' },
     { id: 'clock', title: 'Clock', description: 'Display time, date, and timezone details.', label: 'CLK' },
     { id: 'transit', title: 'Transit', description: 'Show live arrival ETAs from subscriptions.', label: 'TRN' },
+    { id: 'countdown', title: 'Countdown', description: 'A message and the time left until a date.', label: 'CDN' },
+    { id: 'spotify', title: 'Now Playing', description: 'Album art and track from Spotify, only while playing.', label: 'SPT' },
+    { id: 'agents', title: 'Claude Agents', description: 'A blob per Claude Code session; see which need you.', label: 'AGT' },
+    { id: 'pixelart', title: 'Pixel Art', description: 'Draw a picture or import an image to show on the board.', label: 'ART' },
   ];
 
   return (
@@ -420,6 +566,193 @@ export function AddWidgetModal({
                     />
                     Enable scrolling
                   </label>
+                </>
+              )}
+
+              {widgetType === 'agents' && (
+                <>
+                  <label className="tb-label">Show on the board</label>
+                  <select
+                    value={agentsShowWhen}
+                    onChange={(e) => setAgentsShowWhen(e.target.value as typeof agentsShowWhen)}
+                    className="tb-select mb-4"
+                  >
+                    <option value="attention">When a session needs you or has finished</option>
+                    <option value="active">While any session is working</option>
+                    <option value="any">Whenever any session exists, in any state</option>
+                    <option value="always">Always, even with no sessions</option>
+                  </select>
+                  <label className="tb-label">Layout</label>
+                  <select
+                    value={agentsLayout}
+                    onChange={(e) => setAgentsLayout(e.target.value as typeof agentsLayout)}
+                    className="tb-select mb-4"
+                  >
+                    <option value="detail">One session per page, with its state and time</option>
+                    <option value="grid">Four sessions per page</option>
+                  </select>
+                  <p className="mb-2 text-sm text-ops-200">
+                    Sessions report in through Claude Code hooks. Add this to <code>~/.claude/settings.json</code> on each
+                    machine, then restart its sessions:
+                  </p>
+                  <pre className="max-h-56 overflow-auto rounded-lg border border-ops-700 bg-ops-950/65 p-3 text-xs text-ops-100">{agentHooksSnippet()}</pre>
+                  <button
+                    type="button"
+                    className="tb-btn-secondary mt-2"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(agentHooksSnippet()).then(() => {
+                        setHooksCopied(true);
+                        setTimeout(() => setHooksCopied(false), 2000);
+                      });
+                    }}
+                  >
+                    {hooksCopied ? 'Copied' : 'Copy'}
+                  </button>
+                  <p className="mt-2 text-xs text-ops-300">
+                    If the backend has AGENTS_TOKEN set, add <code>?token=…</code> to the URL.
+                  </p>
+                </>
+              )}
+
+              {widgetType === 'pixelart' && (
+                <>
+                  <div className="mb-4 flex flex-wrap items-end gap-3">
+                    {([['Width', 'width', MAX_ART_WIDTH], ['Height', 'height', MAX_ART_HEIGHT]] as const).map(([label, key, max]) => (
+                      <div key={key}>
+                        <label className="tb-label">{label}</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={max}
+                          value={art[key]}
+                          onChange={(e) => {
+                            const n = Math.max(1, Math.min(max, Math.round(Number(e.target.value)) || 1));
+                            const next = { ...art, [key]: n };
+                            setArt({ ...next, pixels: resizePixels(art.pixels, art.width, art.height, next.width, next.height, 0) });
+                          }}
+                          className="tb-input w-24"
+                        />
+                      </div>
+                    ))}
+                    <p className="pb-2 text-xs text-ops-300">Board is 128×32. Smaller art is centered on the first palette color.</p>
+                  </div>
+                  <PixelEditor value={art} onChange={setArt} />
+                </>
+              )}
+
+              {widgetType === 'spotify' && (
+                <>
+                  {spotifyStatus?.connected ? (
+                    <p className="mb-4 text-sm text-ops-100">
+                      Connected{spotifyStatus.displayName ? ` as ${spotifyStatus.displayName}` : ''}.
+                    </p>
+                  ) : (
+                    <div className="mb-4 rounded-lg border border-ops-700 bg-ops-950/65 p-3 text-sm text-ops-100">
+                      <p className="mb-1 font-semibold">
+                        {spotifyStatus === null ? 'Checking Spotify…' : 'Spotify isn\'t connected yet.'}
+                      </p>
+                      {spotifyStatus !== null && (
+                        <p className="text-ops-300">
+                          {spotifyStatus.configured
+                            ? <>On the backend, run <code>bun run spotify:connect</code> and approve access, then reopen this dialog.</>
+                            : <>Set <code>SPOTIFY_CLIENT_ID</code> in the backend&apos;s <code>.env</code>, restart it, then run <code>bun run spotify:connect</code>.</>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <label className="tb-label">Album Art Style</label>
+                  <select
+                    value={spotifyArt}
+                    onChange={(e) => setSpotifyArt(e.target.value)}
+                    className="tb-input mb-4"
+                  >
+                    <option value="pixel-8">Pixel 8×8 (chunky)</option>
+                    <option value="pixel-16">Pixel 16×16 (finer)</option>
+                    <option value="pixel-4">Pixel 4×4 (chunkiest)</option>
+                    <option value="detail">Detail (every pixel)</option>
+                  </select>
+                  <label className="tb-label">Title Color</label>
+                  <div className="mb-4 flex gap-2">
+                    <input
+                      type="color"
+                      value={spotifyColor}
+                      onChange={(e) => setSpotifyColor(e.target.value)}
+                      className="h-10 w-14 rounded border border-ops-600 bg-ops-900"
+                    />
+                    <input
+                      type="text"
+                      value={spotifyColor}
+                      onChange={(e) => setSpotifyColor(e.target.value)}
+                      className="tb-input"
+                      placeholder="#FFFFFF"
+                    />
+                  </div>
+                  <label className="tb-check-label mb-4">
+                    <input
+                      type="checkbox"
+                      className="tb-checkbox"
+                      checked={spotifyShowProgress}
+                      onChange={(e) => setSpotifyShowProgress(e.target.checked)}
+                    />
+                    Show progress bar
+                  </label>
+                  {spotifyShowProgress && (
+                    <>
+                      <label className="tb-label">Progress Bar Position</label>
+                      <select
+                        value={spotifyProgressPosition}
+                        onChange={(e) => setSpotifyProgressPosition(e.target.value === 'bottom' ? 'bottom' : 'top')}
+                        className="tb-input mb-4"
+                      >
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                    </>
+                  )}
+                  <p className="text-xs text-ops-300">
+                    Leaves the rotation while nothing is playing. Long titles are cut short.
+                  </p>
+                </>
+              )}
+
+              {widgetType === 'countdown' && (
+                <>
+                  <label className="tb-label">Message</label>
+                  <input
+                    type="text"
+                    value={countdownMessage}
+                    onChange={(e) => setCountdownMessage(e.target.value)}
+                    className="tb-input mb-1"
+                    placeholder="e.g. Vacation!, Mom's birthday, Leave for train"
+                    maxLength={40}
+                  />
+                  <p className="mb-4 text-xs text-ops-300">The board fits about 20 characters.</p>
+                  <label className="tb-label">Counts down to</label>
+                  <input
+                    type="datetime-local"
+                    value={countdownTarget}
+                    onChange={(e) => setCountdownTarget(e.target.value)}
+                    className="tb-input mb-4"
+                  />
+                  <label className="tb-label">Message Color</label>
+                  <div className="mb-4 flex gap-2">
+                    <input
+                      type="color"
+                      value={countdownColor}
+                      onChange={(e) => setCountdownColor(e.target.value)}
+                      className="h-10 w-14 rounded border border-ops-600 bg-ops-900"
+                    />
+                    <input
+                      type="text"
+                      value={countdownColor}
+                      onChange={(e) => setCountdownColor(e.target.value)}
+                      className="tb-input"
+                      placeholder="#FFB000"
+                    />
+                  </div>
+                  <p className="text-xs text-ops-300">
+                    Shows days, then hours, then minutes left, and disappears once the date passes.
+                  </p>
                 </>
               )}
 
@@ -651,6 +984,51 @@ export function AddWidgetModal({
                   />
                   Widget enabled
                 </label>
+                <label className="tb-check-label mt-3">
+                  <input
+                    type="checkbox"
+                    className="tb-checkbox"
+                    checked={showOnly}
+                    onChange={(e) => setShowOnly(e.target.checked)}
+                  />
+                  Show only this widget
+                </label>
+                <p className="mt-1 text-xs text-ops-300">
+                  Puts this widget on the board right away, even outside its schedule, and hides the others
+                  until show only is turned off or the widget is disabled{widgetType === 'countdown' ? ' or the date passes' : ''}.
+                </p>
+              </div>
+              <div className="md:col-span-2 border-t border-ops-700/70 pt-4">
+                <label className="tb-check-label">
+                  <input
+                    type="checkbox"
+                    className="tb-checkbox"
+                    checked={scheduleEnabled}
+                    onChange={(e) => setScheduleEnabled(e.target.checked)}
+                  />
+                  Only show on a schedule
+                </label>
+                {scheduleEnabled && (
+                  <div className="mt-3 space-y-3">
+                    <TimeWindowFields
+                      idPrefix="widget-schedule"
+                      days={scheduleDays}
+                      start={scheduleStart}
+                      end={scheduleEnd}
+                      onChange={(update) => {
+                        if (update.days !== undefined) setScheduleDays(update.days);
+                        if (update.start !== undefined) setScheduleStart(update.start);
+                        if (update.end !== undefined) setScheduleEnd(update.end);
+                      }}
+                    />
+                    <p className="text-xs text-ops-300">
+                      No days selected means every day. An end time earlier than the start runs overnight;
+                      the same start and end means all day. Inside its window this widget joins the
+                      rotation; outside it, it's hidden. Times are in {(editWidget?.schedule?.timezone ?? browserTimezone).replace(/_/g, ' ')}.
+                      {showOnly && ' Show only is on, so this schedule is ignored until you turn show only off.'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -661,7 +1039,34 @@ export function AddWidgetModal({
                 <p><strong>Type:</strong> {widgetType}</p>
                 <p><strong>Duration:</strong> {duration}s</p>
                 <p><strong>Status:</strong> {enabled ? 'Enabled' : 'Disabled'}</p>
+                <p><strong>Show only:</strong> {showOnly ? 'On' : 'Off'}</p>
+                <p><strong>Schedule:</strong> {scheduleEnabled ? describeSchedule(buildSchedule()!) : 'Always on'}</p>
               </div>
+              {widgetType === 'agents' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Layout:</strong> {agentsLayout === 'grid' ? 'Four per page' : 'One session per page'}</p>
+                  <p><strong>Shown:</strong> {{ attention: 'When a session needs you or has finished', active: 'While any session is working', any: 'Whenever any session exists', always: 'Always' }[agentsShowWhen]}</p>
+                </div>
+              )}
+              {widgetType === 'pixelart' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Size:</strong> {art.width}×{art.height}</p>
+                  <p><strong>Colors:</strong> {new Set(art.pixels).size} used of {art.palette.length}</p>
+                </div>
+              )}
+              {widgetType === 'spotify' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Title color:</strong> {spotifyColor}</p>
+                  <p><strong>Album art:</strong> {spotifyArt === 'detail' ? 'Detail' : `Pixel ${spotifyArt.slice(6)}×${spotifyArt.slice(6)}`}</p>
+                  <p><strong>Progress bar:</strong> {spotifyShowProgress ? `On (${spotifyProgressPosition})` : 'Off'}</p>
+                </div>
+              )}
+              {widgetType === 'countdown' && (
+                <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Message:</strong> {countdownMessage || '(empty)'}</p>
+                  <p><strong>Counts down to:</strong> {countdownTarget ? new Date(countdownTarget).toLocaleString() : '(not set)'}</p>
+                </div>
+              )}
               {widgetType === 'message' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
                   <p><strong>Message:</strong> {messageText || '(empty)'}</p>

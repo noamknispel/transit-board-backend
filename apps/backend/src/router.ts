@@ -1,5 +1,9 @@
 import * as deviceController from "./controllers/device.controller";
 import * as widgetController from "./controllers/widget.controller";
+import * as displayController from "./controllers/display.controller";
+import * as logsController from "./controllers/logs.controller";
+import * as spotifyController from "./controllers/spotify.controller";
+import * as agentsController from "./controllers/agents.controller";
 
 export const router = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -50,6 +54,53 @@ export const router = async (req: Request): Promise<Response> => {
   if (dataMatch && method === "GET") {
     const deviceId = dataMatch[1];
     return deviceController.getDeviceData(deviceId);
+  }
+
+  // GET /devices/:deviceId/display - Pre-rendered frames for the microcontroller
+  const displayMatch = pathname.match(/^\/devices\/([^\/]+)\/display$/);
+  if (displayMatch && method === "GET") {
+    console.log("Display request for device:", displayMatch[1]);
+    const deviceId = displayMatch[1];
+    return displayController.getDisplay(req, deviceId);
+  }
+
+  // PUT /devices/:deviceId/settings - Brightness and on/off
+  const settingsMatch = pathname.match(/^\/devices\/([^\/]+)\/settings$/);
+  if (settingsMatch && method === "PUT") {
+    const deviceId = settingsMatch[1];
+    return displayController.updateSettings(req, deviceId);
+  }
+
+  // GET /devices/:deviceId/preview.png - Same frames as a PNG, for debugging/dashboard
+  const previewMatch = pathname.match(/^\/devices\/([^\/]+)\/preview\.png$/);
+  if (previewMatch && method === "GET") {
+    const deviceId = previewMatch[1];
+    return displayController.getPreview(req, deviceId);
+  }
+
+  // GET /spotify/status - Whether a Spotify account is connected
+  if (pathname === "/spotify/status" && method === "GET") {
+    return spotifyController.getStatus();
+  }
+
+  // POST /agents/events - Claude Code hooks report session state here
+  if (pathname === "/agents/events" && method === "POST") {
+    return agentsController.postEvent(req);
+  }
+
+  // GET /agents - Current Claude Code sessions
+  if (pathname === "/agents" && method === "GET") {
+    return agentsController.listAgents(req);
+  }
+
+  // GET /logs - Recent microcontroller serial output
+  if (pathname === "/logs" && method === "GET") {
+    return logsController.getLogs();
+  }
+
+  // GET /logs/stream - Live microcontroller serial output (Server-Sent Events)
+  if (pathname === "/logs/stream" && method === "GET") {
+    return logsController.streamLogs(req);
   }
 
   // GET /devices - List all devices

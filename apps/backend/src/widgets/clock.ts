@@ -1,5 +1,12 @@
 import { WidgetPlugin } from "./base.js";
 import { WeatherService } from "../services/weather.js";
+import { Canvas, hexToRgb, WHITE } from "../render/canvas.js";
+import { CHAR_WIDTH, measureText } from "../render/font.js";
+import { drawWeatherIcon, WEATHER_ICON_SIZE, type WeatherIcon } from "../render/icons.js";
+import { rowCenter, type RenderContext } from "../render/layout.js";
+
+const RIGHT_MARGIN = 2;
+const SUMMARY_COLOR = hexToRgb(0xa0a0a0);
 
 /**
  * Clock widget plugin
@@ -145,5 +152,40 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     }
 
     return result;
+  }
+
+  render(data: any, ctx: RenderContext): Canvas[] {
+    const canvas = new Canvas(ctx.width, ctx.height);
+
+    // Weather on the right: an icon spanning both rows, with the conditions
+    // (e.g. "CLDY") on the date row and the temperature on the time row.
+    let dateRight = ctx.width - RIGHT_MARGIN;
+    const weather = data.weather;
+    const unit = String(weather?.unit ?? "").toUpperCase();
+    if (weather && typeof weather === "object" && weather.temp !== undefined && (unit === "F" || unit === "C")) {
+      let right = ctx.width - RIGHT_MARGIN;
+      if (weather.icon) {
+        const iconX = right - WEATHER_ICON_SIZE;
+        const iconY = Math.floor((ctx.height - WEATHER_ICON_SIZE) / 2);
+        drawWeatherIcon(canvas, weather.icon as WeatherIcon, iconX, iconY, weather.isDay !== false);
+        right = iconX - 2;
+      }
+      const summary = String(weather.summary ?? "").toUpperCase().slice(0, 5);
+      if (summary) {
+        canvas.text(summary, right, rowCenter(0), SUMMARY_COLOR, { align: "right" });
+      }
+      canvas.text(`${weather.temp}${unit}`, right, rowCenter(1), WHITE, { align: "right" });
+      dateRight = right - measureText(summary) - CHAR_WIDTH;
+    }
+
+    // Row 0: date + timezone, cut short rather than run into the weather
+    const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
+    const dateChars = Math.max(0, Math.floor((dateRight - 2) / CHAR_WIDTH));
+    canvas.text(dateLine.slice(0, Math.min(20, dateChars)), 2, rowCenter(0), WHITE);
+
+    // Row 1: time on the left
+    canvas.text(String(data.time ?? "").slice(0, 10), 2, rowCenter(1), WHITE);
+
+    return [canvas];
   }
 }
