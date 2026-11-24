@@ -175,9 +175,30 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     return result;
   }
 
-  /** Text with a one-pixel shadow so it stays readable over the sky. */
+  /**
+   * Text that stays readable on any sky: a black outline around each letter,
+   * and the sky just outside that dimmed, so white holds up on a bright noon.
+   */
   private skyText(canvas: Canvas, text: string, x: number, row: number, align: "left" | "right"): void {
-    canvas.text(text, x + 1, rowCenter(row) + 1, [0, 0, 0], { align });
+    const mask = new Canvas(canvas.width, canvas.height);
+    mask.text(text, x, rowCenter(row), WHITE, { align });
+    const lit = (px: number, py: number) => px >= 0 && py >= 0 && px < mask.width && py < mask.height && mask.data[(py * mask.width + px) * 3]! > 0;
+    for (let py = 0; py < canvas.height; py++) {
+      for (let px = 0; px < canvas.width; px++) {
+        if (lit(px, py)) continue;
+        let near = 3;
+        for (let dy = -2; dy <= 2 && near > 1; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (lit(px + dx, py + dy)) near = Math.min(near, Math.max(Math.abs(dx), Math.abs(dy)));
+          }
+        }
+        if (near === 1) canvas.setPixel(px, py, [0, 0, 0]);
+        else if (near === 2) {
+          const [r, g, b] = canvas.getPixel(px, py);
+          canvas.setPixel(px, py, [Math.round(r * 0.65), Math.round(g * 0.65), Math.round(b * 0.65)]);
+        }
+      }
+    }
     canvas.text(text, x, rowCenter(row), WHITE, { align });
   }
 
