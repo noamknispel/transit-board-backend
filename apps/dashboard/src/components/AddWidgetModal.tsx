@@ -479,7 +479,7 @@ export function AddWidgetModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-6">
-      <div className="tb-panel w-full rounded-b-none p-4 sm:max-w-3xl sm:rounded-xl2 sm:p-6">
+      <div className="tb-panel max-h-full w-full overflow-y-auto rounded-b-none p-4 sm:max-w-3xl sm:rounded-xl2 sm:p-6">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.16em] text-accent-cyan">Widget Setup</p>
