@@ -22,7 +22,7 @@ export function AddDeviceModal({ isOpen, onClose, onSave }: AddDeviceModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-6">
-      <div className="tb-panel w-full rounded-b-none p-5 sm:max-w-md sm:rounded-xl2 sm:p-6">
+      <div className="tb-panel max-h-full w-full overflow-y-auto rounded-b-none p-5 sm:max-w-md sm:rounded-xl2 sm:p-6">
         <p className="font-mono text-xs uppercase tracking-[0.16em] text-accent-cyan">Device Setup</p>
         <h2 className="mt-1 font-display text-2xl text-ops-100">Add New Device</h2>
         <p className="mt-1 text-sm text-ops-300">Register a board endpoint for widget playback.</p>

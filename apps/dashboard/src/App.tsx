@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from './api/client';
-import { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from './types';
+import { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from './types';
 import { DeviceSelector } from './components/DeviceSelector';
 import { WidgetList } from './components/WidgetList';
 import { AddWidgetModal } from './components/AddWidgetModal';
 import { AddDeviceModal } from './components/AddDeviceModal';
+import { DeviceLogs } from './components/DeviceLogs';
+import { DisplayControls } from './components/DisplayControls';
+import { BoardPreview } from './components/BoardPreview';
 
 const LAST_DEVICE_STORAGE_KEY = 'transit-board:last-selected-device-id';
 
@@ -18,6 +21,8 @@ function App() {
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || null;
 
   const getStoredDeviceId = (): string | null => {
     try {
@@ -42,6 +47,18 @@ function App() {
   // Load devices on mount
   useEffect(() => {
     loadDevices();
+  }, []);
+
+  // Keep each device's on/off state current as schedule times pass
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        setDevices(await api.getDevices());
+      } catch {
+        // Transient; the next refresh will catch up.
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   // Load widgets and subscriptions when device changes
@@ -125,6 +142,18 @@ function App() {
     }
   };
 
+  const handleSaveDisplaySettings = async (update: DisplaySettingsUpdate) => {
+    if (!selectedDeviceId) return;
+
+    try {
+      setError(null);
+      const device = await api.updateDeviceSettings(selectedDeviceId, update);
+      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, ...device } : d)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update display settings');
+    }
+  };
+
   const handleAddWidget = () => {
     setEditingWidget(null);
     setIsWidgetModalOpen(true);
@@ -172,6 +201,16 @@ function App() {
       setError(err instanceof Error ? err.message : 'Failed to delete widget');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateWidget = async (widgetId: number, data: UpdateWidgetRequest) => {
+    try {
+      setError(null);
+      await api.updateWidget(widgetId, data);
+      await loadWidgets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update widget');
     }
   };
 
@@ -247,6 +286,14 @@ function App() {
           onAddDevice={handleAddDevice}
         />
 
+        {selectedDevice && (
+          <DisplayControls device={selectedDevice} onSave={handleSaveDisplaySettings} />
+        )}
+
+        {selectedDevice && (
+          <BoardPreview device={selectedDevice} />
+        )}
+
         {selectedDeviceId && (
           <>
             {loading && !widgets.length ? (
@@ -261,11 +308,14 @@ function App() {
                 onEdit={handleEditWidget}
                 onDelete={handleDeleteWidget}
                 onToggleEnabled={handleToggleEnabled}
+                onUpdate={handleUpdateWidget}
                 onAddWidget={handleAddWidget}
               />
             )}
           </>
         )}
+
+        <DeviceLogs />
 
         <AddDeviceModal
           isOpen={isDeviceModalOpen}

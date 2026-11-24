@@ -1,4 +1,4 @@
-import type { Device, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription } from '../types';
+import type { Device, DisplaySettingsUpdate, Widget, CreateWidgetRequest, UpdateWidgetRequest, Subscription, SpotifyStatus } from '../types';
 
 // Use relative URLs in production (served by backend), or VITE_API_URL for local dev
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -33,6 +33,18 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ name }),
     });
+  }
+
+  async updateDeviceSettings(deviceId: string, update: DisplaySettingsUpdate): Promise<Device> {
+    const response = await this.request<{ device: Device }>(`/devices/${deviceId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    });
+    return response.device;
+  }
+
+  async getSpotifyStatus(): Promise<SpotifyStatus> {
+    return this.request<SpotifyStatus>('/spotify/status');
   }
 
   // Widget endpoints
@@ -96,6 +108,11 @@ class ApiClient {
   async getStopRoutes(stopId: string): Promise<{ routeId: string; routeShortName: string; routeLongName: string; color?: string }[]> {
     const response = await this.request<{ routes: { routeId: string; routeShortName: string; routeLongName: string; color?: string }[] }>(`/stops/${encodeURIComponent(stopId)}/routes`);
     return response.routes;
+  }
+
+  // Microcontroller serial console (Server-Sent Events)
+  logStreamUrl(): string {
+    return `${API_BASE}/logs/stream`;
   }
 
   async geocodeCities(query: string): Promise<Array<{ name: string; latitude: number; longitude: number; country?: string }>> {

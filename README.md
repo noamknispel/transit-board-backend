@@ -14,11 +14,12 @@ transit-board-backend/
 
 ## Features
 
-- **Widget System**: Transit arrivals, custom messages, and clock displays
+- **Widget System**: Transit arrivals, custom messages, clock, countdown, Spotify "Now Playing", pixel art, and Claude agent status displays
 - **React Dashboard**: Web UI for managing devices and widgets with drag-and-drop reordering
 - **Real-time Data**: Live MTA subway arrivals via GTFS-RT feeds
 - **Multi-Device Support**: Manage multiple transit boards from one backend
 - **Dynamic Rotation**: Each widget has configurable display duration
+- **Server-Rendered Display**: The backend draws every widget into pixels; the microcontroller just polls one endpoint and shows the frames
 
 ## Quick Start
 
@@ -39,6 +40,64 @@ open http://localhost:3010/dashboard/
 ### Production Deployment (Raspberry Pi)
 
 See [Deployment Guide](#deployment-to-raspberry-pi) below.
+
+## Spotify "Now Playing" widget
+
+Shows album art, track and artist while something is playing; it drops out of the rotation when paused. One Spotify account is shared by the whole backend.
+
+1. Create an app at <https://developer.spotify.com/dashboard> and register `http://127.0.0.1:8888/callback` as a redirect URI.
+2. Put the app's client ID in `apps/backend/.env` as `SPOTIFY_CLIENT_ID` (no client secret is needed).
+3. Run `bun run spotify:connect` from `apps/backend` and approve access. If your browser is on another machine than the backend, the callback page won't load: paste the URL from the address bar back into the terminal.
+4. Add a "Now Playing" widget from the dashboard.
+
+## Claude Agents widget
+
+Shows a blob for each local Claude Code session with its project name, so you can see which ones need you. Sessions report in through Claude Code hooks; the backend keeps them in memory, so a restart starts empty until sessions report again.
+
+| Blob | Meaning | Hook event |
+| --- | --- | --- |
+| Amber `!`, wide eyes | Needs you (permission prompt or waiting for input); never goes idle | `Notification` |
+| Green, smiling | Finished its turn | `Stop` |
+| Focused face | Working | `UserPromptSubmit`, `PostToolUse` |
+| Asleep, dim | Idle: a new session, a session 1 minute after it finished, or a working session silent for 2 hours | `SessionStart` |
+
+A session is removed on `SessionEnd`, 2 minutes after it goes idle, or after 12 hours without an event. Each session keeps the same blob color, picked from its id. Needs-you sessions come first.
+
+The default "detail" layout gives each session its own page (up to 6): a larger blob, the project name, and the state with how long it has lasted (`NEEDS YOU 40s`, `DONE 5m`, `IDLE 2h`). While working it shows the current tool instead (`Edit 2m`). The "grid" layout fits four sessions per page with names cut to 7 characters.
+
+1. Add a "Claude Agents" widget from the dashboard and choose when it shows: when a session needs you or has finished (default), while any is working, whenever any session exists in any state, or always.
+2. Copy the hooks snippet from the widget's setup step. It looks like this, with your backend's address in place of `PI_ADDRESS`:
+
+   ```json
+   {
+     "hooks": {
+       "Notification": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "curl -s -m 2 -X POST -H 'content-type: application/json' -H \"x-project: $(basename \"$CLAUDE_PROJECT_DIR\")\" --data-binary @- http://PI_ADDRESS:3010/agents/events || true"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+   The real snippet repeats that entry for `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd`.
+3. Merge it into `~/.claude/settings.json` on each machine whose sessions you want to see (or a project's `.claude/settings.json` for that project only), then restart those sessions. Merge by hand if you already have a `hooks` section.
+4. Check it works: `curl http://PI_ADDRESS:3010/agents` lists the sessions the backend knows about.
+
+Sessions are named after the project folder Claude was started in (`$CLAUDE_PROJECT_DIR`), not the folder it has since moved into. Without the `x-project` header the backend falls back to the hook's `cwd`.
+
+To require a token, set `AGENTS_TOKEN` in `apps/backend/.env` and add `?token=...` to the URL in the hook command. Without it, anyone on your network can post events. `PostToolUse` fires on every tool call; you can drop it from the snippet, and the board will then only go back to "working" on your next prompt after you answer a permission prompt.
+
+Cloud sessions are not covered: they can't reach a Pi on your home network.
+
+## Pixel Art widget
+
+Shows a picture you draw or import in the dashboard. The editor has pencil, eraser, fill, eyedropper, undo/redo and a palette of up to 64 colors; colors snap to the 32 levels per channel the panel can show. "Import image" fits a PNG/JPG inside the canvas and reduces its colors. The canvas defaults to the board's 128×32; smaller art is centered over the first palette color, and larger art is cropped.
 
 ## Deployment to Raspberry Pi
 
@@ -86,6 +145,10 @@ MTA_API_KEY=your_mta_api_key_here
 # Server configuration
 PORT=3010
 HOST=0.0.0.0
+
+# Microcontroller serial console (optional, see "Board Console" below)
+# SERIAL_PORT=/dev/ttyACM0   # auto-detected when unset; "off" disables it
+# SERIAL_LOG_LINES=500
 ```
 
 Get your MTA API key from: https://api.mta.info/
@@ -137,6 +200,8 @@ User=pi
 WorkingDirectory=/home/pi/transit-board-backend/apps/backend
 Environment="PATH=/home/pi/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/home/pi/.bun/bin/bun src/index.ts
+# Lets the backend read the microcontroller's USB serial port (Board Console)
+SupplementaryGroups=dialout
 Restart=always
 RestartSec=10
 
@@ -180,11 +245,49 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - Uploading firmware
 - Connecting to backend
 
+### Step 9: Board Console (optional)
+
+With the MatrixPortal plugged into the Pi by USB, the backend reads the board's
+serial console — everything `code.py` prints — and the dashboard shows it live
+in the **Board Console** panel. No firmware changes are needed.
+
+1. Give the backend access to the serial port. The systemd unit above already
+   has `SupplementaryGroups=dialout`; if you run the backend by hand, add your
+   user to the group instead and log out and back in:
+   ```bash
+   sudo usermod -aG dialout $USER
+   ```
+2. Check the Pi sees the board:
+   ```bash
+   ls /dev/serial/by-id/
+   ```
+3. Restart the backend. Its log should show `🔌 Watching for microcontroller serial console`,
+   and `curl localhost:3010/logs` should report `"connected": true`.
+
+The port is auto-detected (first entry in `/dev/serial/by-id/`, then `/dev/ttyACM0`).
+Set `SERIAL_PORT` in `.env` to pick a specific one, or `SERIAL_PORT=off` to disable it.
+The reader only runs on Linux, so on a Mac in development the panel shows
+"Serial disabled". If the board is unplugged or resets, the backend reconnects
+every few seconds.
+
+Only one program can read a serial port at a time: close any `screen`/`tio`
+session on the Pi while the backend is running.
+
 ## Dashboard Features
 
 ### Device Management
 - Create and manage multiple transit board devices
 - Each device has unique ID for microcontroller pairing
+
+### Display Controls
+- Turn the board's display on or off
+- Brightness slider (5-100%). The matrix driver can only switch the panel on or off,
+  so the backend dims the colors of the frames it sends instead
+- Off times: any number of windows when the display turns off, each with its own days
+  and hours and its own enable switch (e.g. every night 23:00–07:00, weekdays
+  09:00–17:00 while you're out, all day Friday). An end earlier than the start runs
+  overnight; the same start and end means all day. The power switch still wins
+- Changes reach the board on its next poll (about 10 seconds); no USB or reflash needed
 
 ### Widget Types
 
@@ -203,12 +306,42 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - 12-hour or 24-hour format
 - Optional date display
 - Timezone support
+- Optional weather (icon, conditions and temperature)
+- **Sky style**: the panel becomes a sky that follows the real time. The gradient runs from night through dawn, day
+  and sunset; the sun and then the moon (with its real phase) ride an arc over the hills; stars come out after
+  dark. With weather on, clouds, rain, snow, fog or a storm are drawn into the scene. Sunrise and sunset are
+  worked out locally from the chosen location (no extra API); without a location it assumes 6am to 7pm.
+
+**Countdown Widget**
+- A message and the time left until a date: "12 days", "1 day 5h", "5h 20m", "25 min"
+- Shows the target date on the right (or the time, when it's today)
+- Disappears once the date passes
+
+**Now Playing Widget**
+- Album art, track and artist from Spotify; hidden while paused (see "Spotify" above)
+
+**Pixel Art Widget**
+- A picture drawn or imported in the dashboard (see "Pixel Art" above)
+
+**Claude Agents Widget**
+- A blob and project name for each local Claude Code session, with amber for the ones that need you (see "Claude Agents" above)
 
 ### Widget Management
+- **Schedule**: limit a widget to certain days and times (e.g. transit on weekday
+  mornings). Inside its window it joins the rotation with the always-on widgets;
+  outside it, it's hidden. Widgets without a schedule are always on
+- **Show only**: puts a widget on the board right away, even outside its own schedule,
+  and hides every widget that isn't show-only. Turn it off and the widget goes back to
+  its schedule. (It doesn't override the display's off times or the power button)
 - Drag-and-drop to reorder widgets
 - Set individual display duration per widget
 - Enable/disable widgets without deleting
 - Edit widget configuration anytime
+
+### Board Console
+- Live serial output from the microcontroller plugged into the Pi
+- Connection status, timestamps, pause and clear
+- Lines from the backend itself (connect/disconnect, errors) are highlighted
 
 ## API Endpoints
 
@@ -218,6 +351,23 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
   ```json
   { "name": "Living Room Display" }
   ```
+- `PUT /devices/:deviceId/settings` - Display brightness, power and off times (all fields optional)
+  ```json
+  {
+    "brightness": 40,
+    "displayOn": true,
+    "offSchedule": [
+      { "start": "23:00", "end": "07:00", "timezone": "America/New_York", "days": [], "enabled": true },
+      { "start": "09:00", "end": "17:00", "timezone": "America/New_York", "days": [1, 2, 3, 4, 5], "enabled": false }
+    ]
+  }
+  ```
+  `days` uses 0 = Sunday … 6 = Saturday (empty = every day). Device responses include `isOn`
+  (whether the display is lit right now) and `offBy` (index of the off time in effect, or null).
+
+### Claude Agents
+- `POST /agents/events` - Claude Code hook payload in, session state updated (`x-project` header names the project; `?token=` when `AGENTS_TOKEN` is set)
+- `GET /agents` - Sessions the backend currently knows about
 
 ### Widgets
 - `GET /devices/:deviceId/widgets` - List widgets for a device
@@ -225,7 +375,9 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - `PUT /widgets/:widgetId` - Update a widget
 - `DELETE /widgets/:widgetId` - Delete a widget
 - `PUT /devices/:deviceId/widgets/reorder` - Reorder widgets
-- `GET /devices/:deviceId/data` - Get widget data with live updates
+- `GET /devices/:deviceId/display` - Pre-rendered frames for the microcontroller (binary; supports `If-None-Match` → `304`)
+- `GET /devices/:deviceId/preview.png?frame=0|all&scale=6` - The same frames as a PNG, for debugging or a dashboard preview
+- `GET /devices/:deviceId/data` - Raw widget data as JSON (legacy; used by the old widget-rendering firmware)
 
 ### Subscriptions (for Transit Widget)
 - `GET /devices/:deviceId/subscriptions` - List subscriptions
@@ -239,6 +391,19 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
   }
   ```
 - `DELETE /devices/:deviceId/subscriptions/:id` - Delete subscription
+
+### Logs (microcontroller serial console)
+- `GET /logs` - Connection status and the most recent lines as JSON
+  ```json
+  {
+    "status": { "enabled": true, "connected": true, "port": "/dev/serial/by-id/usb-Adafruit_..." },
+    "lines": [{ "id": 1, "ts": "2026-11-11T21:30:00.000Z", "source": "device", "text": "Starting main loop" }]
+  }
+  ```
+- `GET /logs/stream` - The same data as Server-Sent Events: a `status` event, the buffered lines, then live updates
+  ```bash
+  curl -N http://<raspberry-pi-ip>:3010/logs/stream
+  ```
 
 ## Tech Stack
 
@@ -269,7 +434,13 @@ See [apps/microcontroller/README.md](apps/microcontroller/README.md) for:
 - Verify WiFi credentials in `settings.toml`
 - Check backend URL uses Raspberry Pi's IP (not localhost)
 - Ensure device ID matches one created in dashboard
-- Check serial output for connection errors
+- Check serial output for connection errors (dashboard **Board Console**, or `curl http://<raspberry-pi-ip>:3010/logs`)
+
+### Board Console is empty
+- "Serial disabled": the backend isn't on Linux, or `SERIAL_PORT=off`
+- "Board not connected": check the USB cable (some are power-only) and `ls /dev/serial/by-id/`
+- "Disconnected … Permission denied": the backend user isn't in the `dialout` group (see Step 9)
+- Connected but no lines: another program (`screen`, `tio`) has the port open; close it and restart the backend
 
 ## Development
 
@@ -282,8 +453,9 @@ apps/backend/
 │   ├── router.ts             # API routes
 │   ├── controllers/          # Request handlers
 │   ├── models/               # Database models
-│   ├── services/             # Business logic (GTFS-RT)
-│   ├── widgets/              # Widget plugin system
+│   ├── services/             # Business logic (GTFS-RT, serial console reader)
+│   ├── widgets/              # Widget plugins (data + rendering)
+│   ├── render/               # Canvas, bitmap font, weather icons, payload encoder, PNG preview
 │   └── migrations/           # Database migrations
 └── transit.db                # SQLite database
 
@@ -296,19 +468,33 @@ apps/dashboard/
 └── dist/                     # Built files (served by backend)
 
 apps/microcontroller/
-├── code.py                   # Main firmware
+├── code.py                   # Main firmware (poll, rotate frames)
+├── display_protocol.py       # Decoder for the /display payload
+├── tests/                    # Host-side tests for the decoder
 ├── settings.toml             # WiFi + backend config
 └── requirements.txt          # CircuitPython libraries
 ```
 
 ### Adding a New Widget Type
 
-1. Create plugin in `apps/backend/src/widgets/yourwidget.ts`
+The backend draws every widget, so a new type needs no firmware changes.
+
+1. Create plugin in `apps/backend/src/widgets/yourwidget.ts`. It implements
+   `getData()` (fetch whatever you need) and `render()` (draw that data into
+   one or more `Canvas` pages; each page is shown for the widget's duration)
 2. Register in `apps/backend/src/widgets/index.ts`
 3. Add widget type to dashboard form in `AddWidgetModal.tsx`
-4. Add renderer in `apps/microcontroller/code.py`
 
-See existing widgets (transit, message, clock) for examples.
+Use `GET /devices/:deviceId/preview.png?frame=all` to see what your widget
+draws without a board attached. See existing widgets (transit, message, clock)
+for examples.
+
+### Tests
+
+```bash
+cd apps/backend && bun test                                       # renderer + wire format
+cd apps/microcontroller && python3 -m unittest discover tests     # firmware payload decoder
+```
 
 ## License
 

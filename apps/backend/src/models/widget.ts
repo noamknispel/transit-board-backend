@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { getDb } from "../db/index.js";
+import type { TimeWindow } from "../services/schedule.js";
 
 export interface Widget {
   id: number;
@@ -9,6 +10,8 @@ export interface Widget {
   duration: number;
   displayOrder: number;
   enabled: number; // SQLite uses 0/1 for boolean
+  showOnly: number; // 1 = while visible, hide every widget that isn't show-only
+  schedule: string | null; // JSON TimeWindow; null = always on
   createdAt: string;
   updatedAt: string;
 }
@@ -20,6 +23,8 @@ export interface WidgetInput {
   duration?: number;
   displayOrder?: number;
   enabled?: boolean;
+  showOnly?: boolean;
+  schedule?: TimeWindow | null;
 }
 
 export class WidgetModel {
@@ -69,17 +74,20 @@ export class WidgetModel {
     const displayOrder = input.displayOrder ?? (maxOrder.max ?? -1) + 1;
     const duration = input.duration ?? 5;
     const enabled = input.enabled ?? true;
+    const showOnly = input.showOnly ?? false;
     
     const result = db.prepare(`
-      INSERT INTO widgets (deviceId, type, config, duration, displayOrder, enabled)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO widgets (deviceId, type, config, duration, displayOrder, enabled, showOnly, schedule)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.deviceId,
       input.type,
       JSON.stringify(input.config),
       duration,
       displayOrder,
-      enabled ? 1 : 0
+      enabled ? 1 : 0,
+      showOnly ? 1 : 0,
+      input.schedule ? JSON.stringify(input.schedule) : null
     );
 
     const widget = this.getById(Number(result.lastInsertRowid));
@@ -122,6 +130,14 @@ export class WidgetModel {
     if (updates.enabled !== undefined) {
       fields.push("enabled = ?");
       values.push(updates.enabled ? 1 : 0);
+    }
+    if (updates.showOnly !== undefined) {
+      fields.push("showOnly = ?");
+      values.push(updates.showOnly ? 1 : 0);
+    }
+    if (updates.schedule !== undefined) {
+      fields.push("schedule = ?");
+      values.push(updates.schedule ? JSON.stringify(updates.schedule) : null);
     }
 
     if (fields.length > 0) {
@@ -183,6 +199,8 @@ export class WidgetModel {
     return {
       ...widget,
       config: JSON.parse(widget.config),
+      showOnly: widget.showOnly === 1,
+      schedule: widget.schedule ? JSON.parse(widget.schedule) : null,
     };
   }
 

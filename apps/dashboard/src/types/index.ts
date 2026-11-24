@@ -1,3 +1,18 @@
+/** A daily time window. An end earlier than the start runs past midnight; equal start and end is all day. */
+export interface TimeWindow {
+  /** "HH:MM", 24h */
+  start: string;
+  end: string;
+  timezone: string;
+  /** 0 = Sunday … 6 = Saturday; empty means every day */
+  days?: number[];
+}
+
+/** A display off time; disabled ones stay saved but don't apply */
+export interface OffWindow extends TimeWindow {
+  enabled: boolean;
+}
+
 // Device types
 export interface Device {
   id: string;
@@ -6,10 +21,27 @@ export interface Device {
   createdAt: string;
   updatedAt?: string;
   lastSeen?: string | null;
+  /** 5-100 (%) */
+  brightness: number;
+  /** Power switch */
+  displayOn: boolean;
+  /** The display is off inside any enabled one of these */
+  offSchedule: OffWindow[];
+  /** Power switch and schedule combined: whether the panel is lit right now */
+  isOn: boolean;
+  /** Index of the off window in effect right now, or null */
+  offBy: number | null;
+}
+
+export interface DisplaySettingsUpdate {
+  brightness?: number;
+  displayOn?: boolean;
+  offSchedule?: OffWindow[];
 }
 
 // Widget types
-export type WidgetType = 'transit' | 'message' | 'clock';
+export type WidgetType = 'transit' | 'message' | 'clock' | 'countdown' | 'spotify' | 'pixelart' | 'agents';
+
 
 export interface BaseWidget {
   id: number;
@@ -18,6 +50,10 @@ export interface BaseWidget {
   displayOrder: number;
   duration: number;
   enabled: boolean;
+  /** While this widget is visible, the board shows only show-only widgets */
+  showOnly: boolean;
+  /** null = always on; scheduled widgets replace always-on ones during their window */
+  schedule: TimeWindow | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,6 +81,7 @@ export interface ClockWidget extends BaseWidget {
     format: '12h' | '24h';
     showDate: boolean;
     timezone: string;
+    style?: 'text' | 'sky';
     showWeather?: boolean;
     temperatureUnit?: 'F' | 'C';
     latitude?: number;
@@ -53,25 +90,92 @@ export interface ClockWidget extends BaseWidget {
   };
 }
 
-export type Widget = TransitWidget | MessageWidget | ClockWidget;
+export interface CountdownWidget extends BaseWidget {
+  type: 'countdown';
+  config: {
+    message: string;
+    color?: string;
+    /** ISO date-time the countdown ends */
+    target: string;
+    /** Used for the target date shown on the board */
+    timezone?: string;
+  };
+}
+
+export interface SpotifyWidget extends BaseWidget {
+  type: 'spotify';
+  config: {
+    /** Title color; the artist is always gray */
+    color?: string;
+    showProgress?: boolean;
+    /** Edge of the board the progress bar sits on; defaults to top */
+    progressPosition?: 'top' | 'bottom';
+    /** How album art is drawn: chunky blocks (default) or every pixel */
+    artStyle?: 'pixel' | 'detail';
+    /** Blocks across the art in the pixel style: 4, 8 or 16; unset uses the backend default */
+    artBlocks?: 4 | 8 | 16;
+  };
+}
+
+export interface PixelArtWidget extends BaseWidget {
+  type: 'pixelart';
+  config: {
+    width: number;
+    height: number;
+    /** Color around art smaller than the board; same as palette[0] */
+    background?: string;
+    /** "#RRGGBB" colors, at most 64 */
+    palette: string[];
+    /** base64 of width*height bytes: palette index per pixel, row-major from the top-left */
+    pixels: string;
+  };
+}
+
+export interface AgentsWidget extends BaseWidget {
+  type: 'agents';
+  config: {
+    /** attention (default): needs you or finished; active: anything not idle; any: any session at all; always */
+    showWhen?: 'attention' | 'active' | 'any' | 'always';
+    /** detail (default): a page per session with its state and time; grid: four per page */
+    layout?: 'detail' | 'grid';
+  };
+}
+
+/** Whether the backend's one Spotify account is set up (never includes tokens) */
+export interface SpotifyStatus {
+  /** SPOTIFY_CLIENT_ID is set on the backend */
+  configured: boolean;
+  connected: boolean;
+  displayName: string | null;
+}
+
+export type Widget = TransitWidget | MessageWidget | ClockWidget | CountdownWidget | SpotifyWidget | PixelArtWidget | AgentsWidget;
 
 // Widget config types for creation/update
 export type WidgetConfig = 
   | TransitWidget['config']
   | MessageWidget['config']
-  | ClockWidget['config'];
+  | ClockWidget['config']
+  | CountdownWidget['config']
+  | SpotifyWidget['config']
+  | PixelArtWidget['config']
+  | AgentsWidget['config'];
 
 export interface CreateWidgetRequest {
   type: WidgetType;
   config: WidgetConfig;
   duration?: number;
   enabled?: boolean;
+  showOnly?: boolean;
+  schedule?: TimeWindow | null;
 }
 
 export interface UpdateWidgetRequest {
   config?: WidgetConfig;
   duration?: number;
   enabled?: boolean;
+  showOnly?: boolean;
+  schedule?: TimeWindow | null;
 }
 
 // Subscription types
@@ -83,4 +187,18 @@ export interface Subscription {
   direction: number;
   stopName: string;
   createdAt: string;
+}
+
+// Microcontroller serial console
+export interface LogLine {
+  id: number;
+  ts: string;
+  source: 'device' | 'system';
+  text: string;
+}
+
+export interface SerialStatus {
+  enabled: boolean;
+  connected: boolean;
+  port: string | null;
 }

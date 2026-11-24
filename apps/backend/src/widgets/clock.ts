@@ -1,5 +1,16 @@
 import { WidgetPlugin } from "./base.js";
 import { WeatherService } from "../services/weather.js";
+import { Canvas, hexToRgb, WHITE } from "../render/canvas.js";
+import { CHAR_WIDTH, measureText } from "../render/font.js";
+import { drawWeatherIcon, WEATHER_ICON_SIZE, type WeatherIcon } from "../render/icons.js";
+import { rowCenter, type RenderContext } from "../render/layout.js";
+import { drawSky } from "../render/sky.js";
+import { skyAt, skyFromLocalMinutes } from "../services/sun.js";
+
+export const CLOCK_STYLES = ["text", "sky"] as const;
+
+const RIGHT_MARGIN = 2;
+const SUMMARY_COLOR = hexToRgb(0xa0a0a0);
 
 /**
  * Clock widget plugin
@@ -15,6 +26,7 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     timezone: "America/New_York",
     showWeather: false,
     temperatureUnit: "F",
+    style: "text",
   };
 
   private weatherService: WeatherService;
@@ -52,6 +64,10 @@ export class ClockWidgetPlugin implements WidgetPlugin {
       !["F", "C"].includes(config.temperatureUnit)
     ) {
       throw new Error("temperatureUnit must be 'F' or 'C'");
+    }
+
+    if (config.style !== undefined && !(CLOCK_STYLES as readonly string[]).includes(config.style)) {
+      throw new Error("style must be 'text' or 'sky'");
     }
 
     if (config.latitude !== undefined && typeof config.latitude !== "number") {
@@ -119,7 +135,9 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     const dateStr = showDate ? dateFormatter.format(now) : "";
     const timezoneShort = this.getShortTimezoneLabel(timezone, now);
 
+    const style = config.style === "sky" ? "sky" : "text";
     const result: any = {
+      style,
       time: timeStr,
       date: dateStr,
       timezone: timezoneShort,
@@ -127,6 +145,16 @@ export class ClockWidgetPlugin implements WidgetPlugin {
       format,
       timestamp: now.toISOString(),
     };
+
+    if (style === "sky") {
+      if (typeof config.latitude === "number" && typeof config.longitude === "number") {
+        result.sky = skyAt(now.getTime(), config.latitude, config.longitude);
+      } else {
+        const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(now);
+        const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+        result.sky = skyFromLocalMinutes(part("hour") * 60 + part("minute"), now.getTime());
+      }
+    }
 
     if (
       showWeather &&
@@ -145,5 +173,81 @@ export class ClockWidgetPlugin implements WidgetPlugin {
     }
 
     return result;
+  }
+
+  /**
+   * Text that stays readable on any sky: a black outline around each letter,
+   * and the sky just outside that dimmed, so white holds up on a bright noon.
+   */
+  private skyText(canvas: Canvas, text: string, x: number, row: number, align: "left" | "right"): void {
+    const mask = new Canvas(canvas.width, canvas.height);
+    mask.text(text, x, rowCenter(row), WHITE, { align });
+    const lit = (px: number, py: number) => px >= 0 && py >= 0 && px < mask.width && py < mask.height && mask.data[(py * mask.width + px) * 3]! > 0;
+    for (let py = 0; py < canvas.height; py++) {
+      for (let px = 0; px < canvas.width; px++) {
+        if (lit(px, py)) continue;
+        let near = 3;
+        for (let dy = -2; dy <= 2 && near > 1; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (lit(px + dx, py + dy)) near = Math.min(near, Math.max(Math.abs(dx), Math.abs(dy)));
+          }
+        }
+        if (near === 1) canvas.setPixel(px, py, [0, 0, 0]);
+        else if (near === 2) {
+          const [r, g, b] = canvas.getPixel(px, py);
+          canvas.setPixel(px, py, [Math.round(r * 0.65), Math.round(g * 0.65), Math.round(b * 0.65)]);
+        }
+      }
+    }
+    canvas.text(text, x, rowCenter(row), WHITE, { align });
+  }
+
+  private renderSky(data: any, ctx: RenderContext): Canvas[] {
+    const canvas = new Canvas(ctx.width, ctx.height);
+    const weather = data.weather;
+    drawSky(canvas, { ...data.sky, icon: weather?.icon });
+    this.skyText(canvas, String(data.time ?? "").slice(0, 10), ctx.width - RIGHT_MARGIN, 0, "right");
+    const unit = String(weather?.unit ?? "").toUpperCase();
+    if (weather?.temp !== undefined && (unit === "F" || unit === "C")) {
+      this.skyText(canvas, `${weather.temp}${unit}`, ctx.width - RIGHT_MARGIN, 1, "right");
+    }
+    if (data.date) this.skyText(canvas, String(data.date).slice(0, 12), 2, 0, "left");
+    return [canvas];
+  }
+
+  render(data: any, ctx: RenderContext): Canvas[] {
+    if (data.style === "sky" && data.sky) return this.renderSky(data, ctx);
+    const canvas = new Canvas(ctx.width, ctx.height);
+
+    // Weather on the right: an icon spanning both rows, with the conditions
+    // (e.g. "CLDY") on the date row and the temperature on the time row.
+    let dateRight = ctx.width - RIGHT_MARGIN;
+    const weather = data.weather;
+    const unit = String(weather?.unit ?? "").toUpperCase();
+    if (weather && typeof weather === "object" && weather.temp !== undefined && (unit === "F" || unit === "C")) {
+      let right = ctx.width - RIGHT_MARGIN;
+      if (weather.icon) {
+        const iconX = right - WEATHER_ICON_SIZE;
+        const iconY = Math.floor((ctx.height - WEATHER_ICON_SIZE) / 2);
+        drawWeatherIcon(canvas, weather.icon as WeatherIcon, iconX, iconY, weather.isDay !== false);
+        right = iconX - 2;
+      }
+      const summary = String(weather.summary ?? "").toUpperCase().slice(0, 5);
+      if (summary) {
+        canvas.text(summary, right, rowCenter(0), SUMMARY_COLOR, { align: "right" });
+      }
+      canvas.text(`${weather.temp}${unit}`, right, rowCenter(1), WHITE, { align: "right" });
+      dateRight = right - measureText(summary) - CHAR_WIDTH;
+    }
+
+    // Row 0: date + timezone, cut short rather than run into the weather
+    const dateLine = `${data.date ?? ""} ${data.timezone ?? ""}`.trim();
+    const dateChars = Math.max(0, Math.floor((dateRight - 2) / CHAR_WIDTH));
+    canvas.text(dateLine.slice(0, Math.min(20, dateChars)), 2, rowCenter(0), WHITE);
+
+    // Row 1: time on the left
+    canvas.text(String(data.time ?? "").slice(0, 10), 2, rowCenter(1), WHITE);
+
+    return [canvas];
   }
 }
