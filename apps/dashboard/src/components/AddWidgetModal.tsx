@@ -109,11 +109,14 @@ export function AddWidgetModal({
   const [clockFormat, setClockFormat] = useState<'12h' | '24h'>('12h');
   const [clockShowDate, setClockShowDate] = useState(true);
   const [clockTimezone, setClockTimezone] = useState('America/New_York');
+  const [clockStyle, setClockStyle] = useState<'text' | 'sky'>('text');
   const [clockShowWeather, setClockShowWeather] = useState(false);
   const [clockTempUnit, setClockTempUnit] = useState<'F' | 'C'>('F');
   const [clockLatitude, setClockLatitude] = useState<number | null>(null);
   const [clockLongitude, setClockLongitude] = useState<number | null>(null);
   const [clockLocationName, setClockLocationName] = useState('');
+  // The sky needs a place to work out sunrise and sunset; weather needs it for the forecast.
+  const clockNeedsLocation = clockShowWeather || clockStyle === 'sky';
   const [clockLocationQuery, setClockLocationQuery] = useState('');
   const [clockLocationResults, setClockLocationResults] = useState<Array<{ name: string; latitude: number; longitude: number; country?: string }>>([]);
 
@@ -176,6 +179,7 @@ export function AddWidgetModal({
           setClockFormat(config.format === '24h' ? '24h' : '12h');
           setClockShowDate(typeof config.showDate === 'boolean' ? config.showDate : true);
           setClockTimezone(typeof config.timezone === 'string' && config.timezone.trim().length > 0 ? config.timezone : 'America/New_York');
+          setClockStyle(config.style === 'sky' ? 'sky' : 'text');
           setClockShowWeather(typeof config.showWeather === 'boolean' ? config.showWeather : false);
           setClockTempUnit(config.temperatureUnit === 'C' ? 'C' : 'F');
           setClockLatitude(typeof config.latitude === 'number' ? config.latitude : null);
@@ -249,7 +253,7 @@ export function AddWidgetModal({
   }, [editWidget, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || widgetType !== 'clock' || !clockShowWeather) return;
+    if (!isOpen || widgetType !== 'clock' || !(clockShowWeather || clockStyle === 'sky')) return;
     if (clockLocationQuery.trim().length < 2) {
       setClockLocationResults([]);
       return;
@@ -265,7 +269,7 @@ export function AddWidgetModal({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [isOpen, widgetType, clockShowWeather, clockLocationQuery]);
+  }, [isOpen, widgetType, clockShowWeather, clockStyle, clockLocationQuery]);
 
   const handleSelectClockLocation = (location: { name: string; latitude: number; longitude: number; country?: string }) => {
     const locationLabel = location.country ? `${location.name}, ${location.country}` : location.name;
@@ -370,11 +374,12 @@ export function AddWidgetModal({
           format: clockFormat,
           showDate: clockShowDate,
           timezone: clockTimezone,
+          style: clockStyle,
           showWeather: clockShowWeather,
           temperatureUnit: clockTempUnit,
-          latitude: clockShowWeather ? (clockLatitude ?? undefined) : undefined,
-          longitude: clockShowWeather ? (clockLongitude ?? undefined) : undefined,
-          locationName: clockShowWeather ? (clockLocationName || undefined) : undefined,
+          latitude: clockNeedsLocation ? (clockLatitude ?? undefined) : undefined,
+          longitude: clockNeedsLocation ? (clockLongitude ?? undefined) : undefined,
+          locationName: clockNeedsLocation ? (clockLocationName || undefined) : undefined,
         };
       case 'transit':
         // Transit widget always uses all subscriptions configured for the device.
@@ -436,7 +441,7 @@ export function AddWidgetModal({
       }
       if (widgetType === 'clock') {
         const hasTimezone = (clockTimezone || '').trim().length > 0;
-        const hasLocation = !clockShowWeather || (clockLatitude !== null && clockLongitude !== null);
+        const hasLocation = !clockNeedsLocation || (clockLatitude !== null && clockLongitude !== null);
         return hasTimezone && hasLocation;
       }
       return true;
@@ -758,6 +763,16 @@ export function AddWidgetModal({
 
               {widgetType === 'clock' && (
                 <>
+                  <label className="tb-label">Style</label>
+                  <select
+                    value={clockStyle}
+                    onChange={(e) => setClockStyle(e.target.value as 'text' | 'sky')}
+                    className="tb-select mb-4"
+                  >
+                    <option value="text">Text</option>
+                    <option value="sky">Sky (sun, moon and stars follow the time)</option>
+                  </select>
+
                   <label className="tb-label">Time Format</label>
                   <select
                     value={clockFormat}
@@ -823,8 +838,12 @@ export function AddWidgetModal({
                         <option value="F">Fahrenheit (F)</option>
                         <option value="C">Celsius (C)</option>
                       </select>
+                    </>
+                  )}
 
-                      <label className="tb-label mt-4">Weather Location</label>
+                  {clockNeedsLocation && (
+                    <>
+                      <label className="tb-label mt-4">{clockShowWeather ? 'Weather Location' : 'Sky Location'}</label>
                       <input
                         type="text"
                         value={clockLocationQuery}
@@ -854,7 +873,7 @@ export function AddWidgetModal({
                       <p className="mt-2 text-xs text-ops-300">
                         {clockLatitude !== null && clockLongitude !== null
                           ? `Selected: ${clockLocationName || `${clockLatitude.toFixed(3)}, ${clockLongitude.toFixed(3)}`}`
-                          : 'Select a location for weather data.'}
+                          : clockShowWeather ? 'Select a location for weather data.' : 'Select a location for sunrise and sunset.'}
                       </p>
                     </>
                   )}
@@ -1076,11 +1095,12 @@ export function AddWidgetModal({
               )}
               {widgetType === 'clock' && (
                 <div className="rounded-lg border border-ops-700 bg-ops-950/65 p-3">
+                  <p><strong>Style:</strong> {clockStyle === 'sky' ? 'Sky' : 'Text'}</p>
                   <p><strong>Format:</strong> {clockFormat}</p>
                   <p><strong>Show Date:</strong> {clockShowDate ? 'Yes' : 'No'}</p>
                   <p><strong>Timezone:</strong> {clockTimezone}</p>
                   <p><strong>Weather:</strong> {clockShowWeather ? `On (${clockTempUnit})` : 'Off'}</p>
-                  {clockShowWeather && (
+                  {clockNeedsLocation && (
                     <p><strong>Location:</strong> {clockLocationName || 'Not selected'}</p>
                   )}
                 </div>

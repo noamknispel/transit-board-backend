@@ -81,6 +81,7 @@ export interface ClockWidget extends BaseWidget {
     format: '12h' | '24h';
     showDate: boolean;
     timezone: string;
+    style?: 'text' | 'sky';
     showWeather?: boolean;
     temperatureUnit?: 'F' | 'C';
     latitude?: number;

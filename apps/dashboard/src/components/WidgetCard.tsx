@@ -68,7 +68,7 @@ export function WidgetCard({ widget, onEdit, onDelete, onToggleEnabled, onUpdate
       case 'message':
         return widget.config.text.substring(0, 50) + (widget.config.text.length > 50 ? '...' : '');
       case 'clock':
-        return `${widget.config.format.toUpperCase()} ${widget.config.showDate ? '+ Date' : ''}`;
+        return `${widget.config.style === 'sky' ? 'Sky · ' : ''}${widget.config.format.toUpperCase()} ${widget.config.showDate ? '+ Date' : ''}`;
       case 'countdown':
         return `${widget.config.message} · ${countdownStatus(widget.config, now)}`;
       case 'spotify':

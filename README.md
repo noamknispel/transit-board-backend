@@ -306,6 +306,11 @@ session on the Pi while the backend is running.
 - 12-hour or 24-hour format
 - Optional date display
 - Timezone support
+- Optional weather (icon, conditions and temperature)
+- **Sky style**: the panel becomes a sky that follows the real time. The gradient runs from night through dawn, day
+  and sunset; the sun and then the moon (with its real phase) ride an arc over the hills; stars come out after
+  dark. With weather on, clouds, rain, snow, fog or a storm are drawn into the scene. Sunrise and sunset are
+  worked out locally from the chosen location (no extra API); without a location it assumes 6am to 7pm.
 
 **Countdown Widget**
 - A message and the time left until a date: "12 days", "1 day 5h", "5h 20m", "25 min"
